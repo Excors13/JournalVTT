@@ -57,7 +57,7 @@ export function activateLinks(container,onManaged){
     const anchor=event.target.closest("a.content-link[data-uuid]");if(!anchor)return;
     event.preventDefault();event.stopPropagation();
     try{const doc=await fromUuid(anchor.dataset.uuid);if(!doc||!doc.testUserPermission(game.user,"OBSERVER"))throw new Error("Запись недоступна.");const entry=doc.documentName==="JournalEntryPage"?doc.parent:doc;
-      if(entry.documentName==="JournalEntry"&&entry.getFlag("world-codex","data")?.kind==="record"&&onManaged)await onManaged(entry.uuid);
+      if(entry.documentName==="JournalEntry"&&entry.getFlag("world-codex","data")?.kind==="record"&&onManaged)await onManaged(doc.uuid);
       else await doc.sheet?.render({force:true});
     }catch(error){report(error);}
   });

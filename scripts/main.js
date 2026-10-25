@@ -3,8 +3,11 @@ import {meta,fullGM,activeManager,provisionDiaries,synchronizeOwnership,migrateR
 import {button,report} from "./dom.js";
 import {CodexApp} from "./app.js";
 import {CodexSettings} from "./settings.js";
+import {hideNativeCodex} from "./experience.js";
+import {QuestNotices} from "./notifications.js";
 
 let app,toggling=false;
+const notices=new QuestNotices();
 export async function openCodex(uuid){
   app??=new CodexApp({position:{width:Math.min(1120,Math.max(500,window.innerWidth-40)),height:Math.min(780,Math.max(420,window.innerHeight-60))}});
   if(uuid)await app.openRecord(uuid);else await app.render({force:true});app.bringToFront();return app;
@@ -31,18 +34,22 @@ function queueSync(){
   },200);
 }
 Hooks.once("init",()=>{
+  game.settings.register(ID,"fontSize",{name:"Размер текста кодекса",hint:"Личная настройка основного текста страниц.",scope:"client",config:true,type:Number,range:{min:12,max:22,step:1},default:14,onChange:value=>app?.applyFont(value)});
   game.settings.register(ID,"policies",{name:"Права разделов",scope:"world",config:false,type:Object,default:defaultPolicies()});
   game.settings.registerMenu(ID,"open",{name:"Кодекс мира",label:"Открыть кодекс",hint:"Мир, задания, бестиарий и личные дневники.",icon:"fa-solid fa-book-open",type:CodexMenu,restricted:false});
   game.settings.registerMenu(ID,"access",{name:"Владение по умолчанию",label:"Настроить доступ по ролям",hint:"Уровни владения разделами для ролей Foundry VTT.",icon:"fa-solid fa-key",type:CodexSettings,restricted:true});
   game.keybindings.register(ID,"open",{name:"Открыть / закрыть кодекс мира",hint:"J переключает окно кодекса. При вводе текста клавиша печатает букву.",editable:[{key:"KeyJ"}],onDown:onCodexKey,repeat:false,precedence:CONST.KEYBINDING_PRECEDENCE.PRIORITY,restricted:false});
   game.modules.get(ID).api={open:openCodex,toggle:toggleCodex,openRecord:uuid=>openCodex(uuid),version:game.modules.get(ID).version};
 });
-Hooks.once("ready",queueSync);
+Hooks.once("ready",()=>{notices.seed(game.journal);queueSync();});
 Hooks.on("renderJournalDirectory",(_app,html)=>{
-  const root=html instanceof HTMLElement?html:html?.[0];if(!root||root.querySelector(".world-codex-launcher"))return;
+  const root=html instanceof HTMLElement?html:html?.[0];if(!root)return;hideNativeCodex(root);if(root.querySelector(".world-codex-launcher"))return;
   const b=button("Кодекс мира",()=>openCodex(),{icon:"book-open",cls:"world-codex-launcher"});
   (root.querySelector(".header-actions")||root.querySelector(".directory-header")||root).prepend(b);
 });
+Hooks.on("createJournalEntry",doc=>notices.created(doc));
+Hooks.on("updateJournalEntry",doc=>notices.updated(doc));
+Hooks.on("deleteJournalEntry",doc=>notices.deleted(doc));
 Hooks.on("preUpdateJournalEntry",(doc,changes,options)=>{
   // A change made through Foundry's native ownership dialog is a manual exception.
   if(!fullGM()||options.wcManaged||meta(doc)?.kind!=="record")return;

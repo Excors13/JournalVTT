@@ -7,8 +7,8 @@ export const editable = doc => Boolean(doc?.testUserPermission(game.user,"OWNER"
 export const policies = () => normalizePolicies(game.settings.get(ID,"policies"));
 export const managedRecords = () => game.journal.filter(d=>meta(d)?.kind==="record"&&Object.hasOwn(SECTIONS,meta(d).section));
 export const visibleRecords = () => managedRecords().filter(d=>d.testUserPermission(game.user,"LIMITED")).map(doc=>({doc,meta:meta(doc)})).sort((a,b)=>(a.doc.sort||0)-(b.doc.sort||0)||a.doc.name.localeCompare(b.doc.name,"ru"));
-export const textPage = doc => doc?.pages.find(p=>p.type==="text");
-export const getBody = doc => textPage(doc)?.text?.content||"";
+export const textPage = (doc,pageId) => pageId?doc?.pages.find(p=>p.id===pageId&&p.type==="text"):doc?.pages.find(p=>p.type==="text");
+export const getBody = (doc,pageId) => {const page=pageId?textPage(doc,pageId):doc?.pages.find(p=>p.type==="text"&&readable(p));return readable(page)?page.text?.content||"":"";};
 export const versionOf = doc => JSON.stringify([doc?._stats?.modifiedTime,...(doc?.pages?.contents||[]).map(p=>[p.id,p._stats?.modifiedTime])]);
 export function activeManager() {
   const managers=game.users.filter(u=>u.active&&fullGM(u)).sort((a,b)=>a.id.localeCompare(b.id));
@@ -31,8 +31,10 @@ export async function createRecord(input, body) {
   const doc=await CONFIG.JournalEntry.documentClass.create({name:input.name.trim(),sort,folder:destination,ownership,pages:[{name:"Текст",type:"text",text:{format:1,content:body}}],flags:{[ID]:{data:{...data,accessMode:"section",rolePolicy:policies()[data.section],managedOwnership:copy(ownership)}}}},{wcManaged:true});
   return doc;
 }
-export async function saveRecord(doc,input,body,expectedVersion) {
+export async function saveRecord(doc,input,body,expectedVersion,pageId) {
   if(!editable(doc)||meta(doc)?.kind!=="record")throw new Error("Нет права редактирования этой записи.");
+  const page=textPage(doc,pageId);
+  if((pageId&&!page)||(page&&!editable(page)))throw new Error("Нет права редактирования этой страницы.");
   if(expectedVersion!==versionOf(doc))throw new Error("Запись изменилась после открытия редактора. Скопируйте свой текст и откройте её заново.");
   const old=meta(doc),next=cleanRecord({...input,section:fullGM()?input.section:old.section});
   const update={name:input.name.trim(),[`flags.${ID}.data`]:{...copy(old),...next}};
@@ -45,7 +47,6 @@ export async function saveRecord(doc,input,body,expectedVersion) {
   }
   if(input.folderId!==undefined){const destination=validFolder(input.folderId,next.section);if(input.folderId&&!destination)throw new Error("Папка недоступна в этом разделе.");update.folder=destination||await nativeFolder(next.section);}
   // Core embedded-document writes validate the current user's ownership on the server.
-  const page=textPage(doc);
   if(page)await doc.updateEmbeddedDocuments("JournalEntryPage",[{_id:page.id,"text.content":body}],{wcManaged:true});
   else await doc.createEmbeddedDocuments("JournalEntryPage",[{name:"Текст",type:"text",text:{format:1,content:body}}],{wcManaged:true});
   await doc.update(update,{wcManaged:true});return doc;
@@ -85,7 +86,25 @@ export async function setObjectiveState(doc,index,state,expectedVersion){
 export async function saveMap(doc,data,expectedVersion){
   if(!editable(doc)||meta(doc)?.section!=="maps")throw new Error("Нет права редактировать карту.");
   if(expectedVersion!==versionOf(doc))throw new Error("Карта изменена другим пользователем. Откройте редактор заново.");
-  await doc.update({[`flags.${ID}.data.map`]:cleanMap(data)},{wcManaged:true});
+  const next=cleanMap(data);
+  if(!game.user.isGM){
+    const previous=cleanMap(meta(doc).map);
+    for(const key of ["pins","labels"]){
+      const hidden=previous[key].filter(item=>item.hidden),ids=new Set(hidden.map(item=>item.id));
+      next[key]=[...next[key].filter(item=>!ids.has(item.id)).map(item=>({...item,hidden:false})),...hidden];
+    }
+  }
+  await doc.update({[`flags.${ID}.data.map`]:next},{wcManaged:true});
+}
+export async function importJournal(doc,section,folderId=null){
+  if(!fullGM())throw new Error("Добавлять журналы может только мастер.");
+  if(!doc||game.journal.get(doc.id)!==doc||meta(doc)?.kind||!Object.hasOwn(SECTIONS,section))throw new Error("Выберите обычный журнал мира и раздел.");
+  if(!doc.pages.some(p=>p.type==="text"))throw new Error("В журнале должна быть хотя бы одна текстовая страница.");
+  if(folderId&&!validFolder(folderId,section))throw new Error("Папка недоступна в этом разделе.");
+  const data=cleanRecord({section});
+  // Attach the original document: UUIDs, embedded pages and native permissions stay intact.
+  await doc.update({folder:folderId||await nativeFolder(section),[`flags.${ID}.data`]:{...data,accessMode:"manual",sourceFolder:folderIdOf(doc)}},{wcManaged:true});
+  return doc;
 }
 export async function migrateRecords(){
   if(!fullGM())return;
