@@ -1,0 +1,12 @@
+{
+  "id": "world-codex",
+  "title": "World Codex — Кодекс мира",
+  "description": "Кодекс мира: задания, фракции, бестиарий, карты с метками и подписями, личные дневники. Права по ролям Foundry VTT.",
+  "version": "0.2.0",
+  "authors": [{"name": "World Codex contributors"}],
+  "compatibility": {"minimum": "14", "maximum": "14"},
+  "esmodules": ["scripts/main.js"],
+  "styles": ["styles/codex.css"],
+  "license": "LICENSE",
+  "readme": "README.md"
+}

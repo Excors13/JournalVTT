@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 960">
+<defs><linearGradient id="paper" x2=".8" y2="1"><stop stop-color="#bdb28c"/><stop offset="1" stop-color="#958d69"/></linearGradient><pattern id="forest" width="32" height="40" patternUnits="userSpaceOnUse"><path d="M16 4 5 30H27ZM16 30v6" fill="#66704e" fill-opacity=".55" stroke="#526046" stroke-width="1"/></pattern><pattern id="mountains" width="90" height="70" patternUnits="userSpaceOnUse"><path d="m3 65 36-60 37 60M39 5l4 41 17 19" fill="#c3b88f" stroke="#716a4c" stroke-width="2"/></pattern><pattern id="waves" width="45" height="15" patternUnits="userSpaceOnUse"><path d="M0 8Q12 4 23 8T45 8" fill="none" stroke="#c5cbb0" stroke-opacity=".22"/></pattern></defs>
+<path fill="url(#paper)" d="M0 0h1440v960H0z"/>
+<path d="M0 0h350c-110 110 22 164-86 246S289 390 202 478s83 133 10 214 32 153-39 268H0z" fill="#6b817b" stroke="#706e4c" stroke-width="4"/>
+<path d="M0 0h230v960H0z" fill="url(#waves)"/>
+<path d="M710 45h590v205H710z" fill="url(#mountains)" opacity=".85"/>
+<ellipse cx="540" cy="460" rx="150" ry="155" fill="url(#forest)"/><ellipse cx="1100" cy="495" rx="145" ry="180" fill="url(#forest)"/>
+<path d="M1060 0C985 172 1080 264 922 363S884 467 755 517 723 657 563 719 400 849 174 882" fill="none" stroke="#647e79" stroke-width="14"/>
+<path d="M1060 0C985 172 1080 264 922 363S884 467 755 517 723 657 563 719 400 849 174 882" fill="none" stroke="#a6b6a1" stroke-width="4"/>
+<path d="M580 665Q615 599 760 565T835 450Q918 500 907 700M835 450Q720 420 650 372M835 450 1040 500" stroke="#8e7751" stroke-width="4" stroke-dasharray="7 6" fill="none"/>
+<g stroke="#655a3b" stroke-width="2" fill="none"><path d="M72 55v72m-30-36h60m-30-36 9 30-9-9-9 9z"/><circle cx="72" cy="91" r="25"/></g>
+</svg>
