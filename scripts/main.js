@@ -4,10 +4,23 @@ import {button,report} from "./dom.js";
 import {CodexApp} from "./app.js";
 import {CodexSettings} from "./settings.js";
 
-let app;
+let app,toggling=false;
 export async function openCodex(uuid){
   app??=new CodexApp({position:{width:Math.min(1120,Math.max(500,window.innerWidth-40)),height:Math.min(780,Math.max(420,window.innerHeight-60))}});
   if(uuid)await app.openRecord(uuid);else await app.render({force:true});app.bringToFront();return app;
+}
+export async function toggleCodex(){
+  if(toggling)return;
+  toggling=true;
+  try{if(app?.rendered)await app.close();else await openCodex();}finally{toggling=false;}
+}
+function onCodexKey(context={}){
+  // Keep J available inside chat, form fields and the native journal editor.
+  const typing="input,textarea,select,[contenteditable]:not([contenteditable='false']),prose-mirror";
+  const targets=[document.activeElement,...(context.event?.composedPath?.()||[])];
+  if(targets.some(target=>target?.closest?.(typing)))return false;
+  if(!context.repeat)toggleCodex().catch(report);
+  return true;
 }
 class CodexMenu extends foundry.applications.api.ApplicationV2 {render(){return openCodex();}}
 let syncTimer,syncQueue=Promise.resolve();
@@ -21,8 +34,8 @@ Hooks.once("init",()=>{
   game.settings.register(ID,"policies",{name:"Права разделов",scope:"world",config:false,type:Object,default:defaultPolicies()});
   game.settings.registerMenu(ID,"open",{name:"Кодекс мира",label:"Открыть кодекс",hint:"Мир, задания, бестиарий и личные дневники.",icon:"fa-solid fa-book-open",type:CodexMenu,restricted:false});
   game.settings.registerMenu(ID,"access",{name:"Владение по умолчанию",label:"Настроить доступ по ролям",hint:"Уровни владения разделами для ролей Foundry VTT.",icon:"fa-solid fa-key",type:CodexSettings,restricted:true});
-  game.keybindings.register(ID,"open",{name:"Открыть кодекс мира",editable:[{key:"KeyJ",modifiers:["ALT"]}],onDown:()=>{openCodex().catch(report);return true;},restricted:false});
-  game.modules.get(ID).api={open:openCodex,openRecord:uuid=>openCodex(uuid),version:game.modules.get(ID).version};
+  game.keybindings.register(ID,"open",{name:"Открыть / закрыть кодекс мира",hint:"J переключает окно кодекса. При вводе текста клавиша печатает букву.",editable:[{key:"KeyJ"}],onDown:onCodexKey,repeat:false,precedence:CONST.KEYBINDING_PRECEDENCE.PRIORITY,restricted:false});
+  game.modules.get(ID).api={open:openCodex,toggle:toggleCodex,openRecord:uuid=>openCodex(uuid),version:game.modules.get(ID).version};
 });
 Hooks.once("ready",queueSync);
 Hooks.on("renderJournalDirectory",(_app,html)=>{
