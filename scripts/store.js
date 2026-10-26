@@ -5,6 +5,9 @@ export const fullGM = (user=game.user) => Number(user?.role)===4;
 export const readable = doc => Boolean(doc?.testUserPermission(game.user,"OBSERVER"));
 export const editable = doc => Boolean(doc?.testUserPermission(game.user,"OWNER"));
 export const policies = () => normalizePolicies(game.settings.get(ID,"policies"));
+export function canCreateInSection(section,user=game.user){
+  return Object.hasOwn(SECTIONS,section)&&Boolean(fullGM(user)||([1,2].includes(Number(user?.role))&&policies()[section][Number(user.role)]===3));
+}
 export const managedRecords = () => game.journal.filter(d=>meta(d)?.kind==="record"&&Object.hasOwn(SECTIONS,meta(d).section));
 export const visibleRecords = () => managedRecords().filter(d=>d.testUserPermission(game.user,"LIMITED")).map(doc=>({doc,meta:meta(doc)})).sort((a,b)=>(a.doc.sort||0)-(b.doc.sort||0)||a.doc.name.localeCompare(b.doc.name,"ru"));
 export const textPage = (doc,pageId) => pageId?doc?.pages.find(p=>p.id===pageId&&p.type==="text"):doc?.pages.find(p=>p.type==="text");
@@ -24,7 +27,15 @@ export async function nativeFolder(section) {
   return folder.id;
 }
 export async function createRecord(input, body) {
-  if(!fullGM())throw new Error("Создавать записи кодекса может мастер. Игроки могут дополнять доступные им записи.");
+  if(!canCreateInSection(input.section))throw new Error("Для создания журнала нужен уровень «Владелец» в этом разделе.");
+  if(!fullGM()&&(!CONFIG.JournalEntry.documentClass.canUserCreate?.(game.user)||!validFolder(input.folderId,input.section)&&!game.folders.some(f=>f.getFlag(ID,"section")===input.section))){
+    const {requestCreation,waitForCreated}=await import("./creation.js");
+    const result=await requestCreation("record",{name:input.name,section:input.section,folderId:input.folderId||null});
+    const doc=await waitForCreated("JournalEntry",result.id);
+    // Draft text and metadata use the player's ordinary owner-authorized document write.
+    return saveRecord(doc,input,body,versionOf(doc));
+  }
+  if(input.folderId&&!validFolder(input.folderId,input.section))throw new Error("Папка недоступна в этом разделе.");
   const data=cleanRecord(input),ownership=roleOwnership(policies(),data.section,game.users.contents);
   const destination=validFolder(input.folderId,data.section)||await nativeFolder(data.section);
   const sort=Math.max(0,...managedRecords().filter(d=>meta(d).section===data.section).map(d=>d.sort||0))+100000;
@@ -56,9 +67,13 @@ export const sectionFolders=section=>game.folders.filter(f=>f.type==="JournalEnt
 export function validFolder(id,section){return id&&game.folders.some(f=>f.id===id&&f.type==="JournalEntry"&&(f.getFlag(ID,"folderSection")===section||f.getFlag(ID,"section")===section))?id:null;}
 export function folderLabel(id){const result=[],seen=new Set();while(id&&!seen.has(id)){seen.add(id);const f=game.folders.get(id);if(!f||f.getFlag(ID,"root")||f.getFlag(ID,"section"))break;result.unshift(f.name);id=folderIdOf(f);}return result.join(" / ");}
 export async function saveFolder(section,name,parentId=null,id=null){
-  if(!fullGM()||!Object.hasOwn(SECTIONS,section))throw new Error("Папками управляет мастер.");
+  if(!canCreateInSection(section)||(id&&!fullGM()))throw new Error("Для создания папки нужен уровень «Владелец» в этом разделе. Существующие папки изменяет мастер.");
   name=String(name).trim().slice(0,80);if(!name||name.includes("/"))throw new Error("Введите название папки без символа /.");
   if(parentId&&!validFolder(parentId,section))throw new Error("Неверная родительская папка.");
+  if(!fullGM()&&(!CONFIG.Folder.documentClass.canUserCreate?.(game.user)||!parentId&&!game.folders.some(f=>f.getFlag(ID,"section")===section))){
+    const {requestCreation,waitForCreated}=await import("./creation.js");
+    const result=await requestCreation("folder",{section,name,parentId});return waitForCreated("Folder",result.id);
+  }
   let p=parentId;const seen=new Set();while(p&&!seen.has(p)){if(p===id)throw new Error("Нельзя поместить папку внутрь самой себя.");seen.add(p);p=folderIdOf(game.folders.get(p));}
   const destination=parentId||await nativeFolder(section);
   if(game.folders.some(f=>f.id!==id&&f.name===name&&folderIdOf(f)===destination))throw new Error("Такая папка уже существует.");

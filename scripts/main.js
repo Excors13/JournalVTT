@@ -5,6 +5,7 @@ import {CodexApp} from "./app.js";
 import {CodexSettings} from "./settings.js";
 import {hideNativeCodex} from "./experience.js";
 import {QuestNotices} from "./notifications.js";
+import {handleCreationRequest} from "./creation.js";
 
 let app,toggling=false;
 const notices=new QuestNotices();
@@ -60,4 +61,6 @@ for(const event of ["createJournalEntryPage","updateJournalEntryPage","deleteJou
 for(const event of ["createFolder","updateFolder","deleteFolder"])Hooks.on(event,()=>app?.onWorldChange(null));
 Hooks.on("createUser",queueSync);Hooks.on("deleteUser",queueSync);
 Hooks.on("updateUser",(_user,changes)=>{if(Object.hasOwn(changes,"role")||Object.hasOwn(changes,"active")||Object.hasOwn(changes,"name"))queueSync();});
+Hooks.on("updateUser",(user,changes,options,userId)=>{handleCreationRequest(user,changes,options,userId)?.catch(report);});
+Hooks.on("updateSetting",setting=>{if(setting.key===`${ID}.policies`)app?.onWorldChange(null);});
 Hooks.on("userConnected",queueSync);

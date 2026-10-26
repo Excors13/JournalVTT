@@ -254,3 +254,7 @@
 @container(max-width:900px){.wc-app .wc-shell{--wc-sidebar-width:195px;}}
 @container(max-width:720px){.wc-app .wc-shell{--wc-sidebar-width:170px;}.wc-app .wc-brand{letter-spacing:.05em;}.wc-app .wc-top{padding-inline:12px;}}
 @container(max-width:560px){.wc-app .wc-shell{grid-template-columns:16px minmax(0,1fr);}.wc-app:not(.wc-collapsed) .wc-divider{position:absolute;left:210px;top:0;bottom:0;z-index:6;}.wc-app:not(.wc-collapsed) .wc-reader{grid-column:2;}.wc-app.wc-collapsed .wc-divider{position:static;}}
+
+/* 1.0.1: compact navigation and import by native journal drag-and-drop. */
+.wc-app .wc-sidebar>.wc-search{margin:0 0 18px;}
+.wc-app .wc-sidebar.wc-import-over{outline:1px dashed var(--wc-gold);outline-offset:-5px;}

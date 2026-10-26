@@ -23,7 +23,7 @@ beforeEach(async()=>{
   setup();document.activeElement=null;discard=true;confirmations=0;
   game.settings.register=()=>{};game.settings.registerMenu=()=>{};
   game.keybindings={register:(_id,_key,config)=>binding=config};
-  game.modules=new Map([[ID,{version:"1.0.0"}]]);
+  game.modules=new Map([[ID,{version:"1.0.1"}]]);
   hooks.get("init")();
   const app=await openCodex();app.editing=null;app.dirty=false;app.saving=false;await app.close();
 });
