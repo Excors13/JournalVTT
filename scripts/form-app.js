@@ -17,3 +17,4 @@ export class CodexForm extends CodexBase {
     form.addEventListener("submit",e=>{e.preventDefault();if(!this.busy)run(async()=>this.save(await read()));});return root;
   }
 }
+

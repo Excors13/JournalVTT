@@ -92,6 +92,20 @@ export async function moveRecord(doc,toFolder,before=null,after=false){
   if(sort===lo||sort===hi){if(!fullGM())throw new Error("Для пересортировки этой папки обратитесь к мастеру.");peers.splice(index,0,doc);await CONFIG.JournalEntry.documentClass.updateDocuments(peers.map((d,i)=>({_id:d.id,sort:(i+1)*100000,...(d===doc?{folder:destination}: {})})),{wcManaged:true});return;}
   await doc.update({folder:destination,sort},{wcManaged:true});
 }
+export async function deleteRecord(doc){
+  if(!fullGM()||!doc||game.journal.get(doc.id)!==doc||meta(doc)?.kind!=="record")throw new Error("Удалять записи кодекса может только мастер.");
+  return doc.delete({wcManaged:true});
+}
+export async function deleteFolder(folder){
+  const section=folder?.getFlag(ID,"folderSection");
+  if(!fullGM()||!folder||game.folders.get(folder.id)!==folder||folder.type!=="JournalEntry"||!Object.hasOwn(SECTIONS,section)||folder.getFlag(ID,"root")||folder.getFlag(ID,"section"))throw new Error("Удалять пользовательские папки кодекса может только мастер.");
+  const parent=validFolder(folderIdOf(folder),section)||await nativeFolder(section);
+  // Move direct contents first; never ask Foundry to recursively delete documents.
+  for(const doc of game.journal.filter(d=>folderIdOf(d)===folder.id))await doc.update({folder:parent},{wcManaged:true});
+  for(const child of game.folders.filter(f=>folderIdOf(f)===folder.id))await child.update({folder:parent},{wcManaged:true});
+  await folder.delete({deleteSubfolders:false,deleteContents:false,wcManaged:true});
+  return parent;
+}
 export async function setObjectiveState(doc,index,state,expectedVersion){
   if(!editable(doc)||meta(doc)?.section!=="quests"||!Object.hasOwn(OBJECTIVE_STATES,state))throw new Error("Нет права менять цель.");
   if(expectedVersion!==versionOf(doc))throw new Error("Задание изменилось. Откройте его заново.");
@@ -161,13 +175,17 @@ export function visibleDiaries() {
 }
 export async function provisionDiaries() {
   if(!fullGM())return;
+  const updates=[],missing=[];
   for(const user of game.users.filter(u=>Number(u.role)>0&&!u.isGM)){
     const existing=game.journal.find(d=>meta(d)?.kind==="diary"&&meta(d).ownerId===user.id);
     const ownership=diaryOwnership(user.id,game.users.contents);
-    if(existing){if(!sameOwnership(existing.ownership,ownership))await existing.update({ownership:ownershipPatch(existing.ownership,ownership)},{wcManaged:true});continue;}
-    await CONFIG.JournalEntry.documentClass.create({name:`Дневник · ${user.name}`,folder:await nativeFolder("diary"),ownership,pages:[],flags:{[ID]:{data:{kind:"diary",schema:SCHEMA,ownerId:user.id}}}},{wcManaged:true});
+    if(existing){if(!sameOwnership(existing.ownership,ownership))updates.push({_id:existing.id,ownership:ownershipPatch(existing.ownership,ownership)});continue;}
+    missing.push({name:`Дневник · ${user.name}`,ownership,pages:[],flags:{[ID]:{data:{kind:"diary",schema:SCHEMA,ownerId:user.id}}}});
   }
+  if(updates.length)await CONFIG.JournalEntry.documentClass.updateDocuments(updates,{wcManaged:true});
+  if(missing.length){const folder=await nativeFolder("diary");await CONFIG.JournalEntry.documentClass.createDocuments(missing.map(data=>({...data,folder})),{wcManaged:true});}
 }
+
 export async function saveDiary(doc,page,input,body,expectedVersion) {
   if(meta(doc)?.kind!=="diary"||meta(doc).ownerId!==game.user.id||!editable(doc))throw new Error("Редактировать дневник может только его автор.");
   if(expectedVersion!==versionOf(doc))throw new Error("Дневник изменился. Скопируйте текст и откройте запись заново.");
@@ -175,3 +193,4 @@ export async function saveDiary(doc,page,input,body,expectedVersion) {
   if(page){await doc.updateEmbeddedDocuments("JournalEntryPage",[{_id:page.id,...data}],{wcManaged:true});return page;}
   const [created]=await doc.createEmbeddedDocuments("JournalEntryPage",[data],{wcManaged:true});return created;
 }
+

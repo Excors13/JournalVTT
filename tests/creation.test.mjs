@@ -83,3 +83,4 @@ test("a section owner without global creation permissions gets a journal and fol
   assert.equal(game.user,player);assert.equal(doc.ownership.t,3);assert.equal(folderIdOf(doc),folder.id);assert.equal(doc.pages[0].text.content,"<p>Private draft body</p>");
   assert.equal(meta(doc).facts[0].value,"Player");assert.equal(player.getFlag(ID,"creationRequest").body,undefined);assert.equal(callbacks.size,0);
 });
+

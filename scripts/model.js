@@ -30,11 +30,14 @@ export function diaryOwnership(ownerId, users) {
   return {default:0,[ownerId]:owner && Number(owner.role)>0 ? 3 : 0};
 }
 export function sameOwnership(a,b) {
-  const normalize=o=>Object.fromEntries(Object.entries(o||{}).filter(([,v])=>Number(v)>=0).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,Number(v)]));
+  // An explicit fallback level is equivalent to an absent user override.
+  const normalize=o=>{const fallback=validLevel(o?.default??0);return Object.fromEntries([["default",fallback],...Object.entries(o||{}).filter(([k,v])=>k!=="default"&&Number(v)!==fallback).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,Number(v)])]);};
   return JSON.stringify(normalize(a))===JSON.stringify(normalize(b));
 }
 export function ownershipPatch(current,next) {
-  return {...next,...Object.fromEntries(Object.keys(current||{}).filter(k=>!Object.hasOwn(next,k)).map(k=>[`-=${k}`,null]))};
+  // v14 validates ownership diffs as a mapping of IDs to integer levels.
+  // Revoke obsolete grants with the new fallback, never -=user: null.
+  return {...Object.fromEntries(Object.keys(current||{}).filter(k=>!Object.hasOwn(next,k)).map(k=>[k,validLevel(next.default??0)])),...next};
 }
 export function cleanRecord(input) {
   const section=Object.hasOwn(SECTIONS,input.section)?input.section:"world";
@@ -75,3 +78,4 @@ export function folderTree(records) {
   }
   return root;
 }
+

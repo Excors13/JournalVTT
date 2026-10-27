@@ -6,9 +6,21 @@ export function hideNativeCodex(root){
   if(game.user.isGM||!root?.querySelectorAll)return;
   const journals=new Set(game.journal.filter(d=>["record","diary"].includes(meta(d)?.kind)).map(d=>d.id));
   const folders=new Set(game.folders.filter(f=>f.getFlag(ID,"root")||f.getFlag(ID,"section")||f.getFlag(ID,"folderSection")).map(f=>f.id));
-  for(const row of root.querySelectorAll("[data-entry-id],[data-document-id],[data-folder-id]")){
-    if(journals.has(row.dataset.entryId)||journals.has(row.dataset.documentId)||folders.has(row.dataset.folderId))row.remove();
+  for(const row of root.querySelectorAll("[data-entry-id],[data-document-id],[data-folder-id],[data-uuid]")){
+    const {entryId,documentId,folderId,uuid}=row.dataset;
+    if(journals.has(entryId)||journals.has(documentId)||folders.has(folderId)||folders.has(documentId)||folders.has(entryId)||uuid?.startsWith("JournalEntry.")&&journals.has(uuid.split(".")[1])||uuid?.startsWith("Folder.")&&folders.has(uuid.split(".")[1]))row.remove();
   }
+}
+
+export function mountCodexLauncher(html,open){
+  // Duck typing also supports detached windows, where instanceof HTMLElement fails.
+  const root=html?.querySelector?html:html?.[0];if(!root?.querySelector)return;
+  hideNativeCodex(root);
+  let launcher=root.querySelector(".world-codex-launcher");
+  if(!launcher)launcher=button("Кодекс мира",open,{icon:"book-open",cls:"world-codex-launcher",title:`Открыть кодекс мира · ${game.modules.get(ID)?.version||""}`});
+  // Core creation controls may be hidden for players. Keep our button outside them.
+  const host=root.querySelector(".directory-header")||root;
+  if(launcher.parentElement!==host)host.prepend(launcher);
 }
 
 export function accessSummary(doc){
@@ -61,3 +73,4 @@ export function fontControls(app){
   const controls=node("div","wc-font-controls");
   controls.append(button("A−",()=>app.changeFont(-1),{title:"Уменьшить текст"}),button("A+",()=>app.changeFont(1),{title:"Увеличить текст"}));return controls;
 }
+

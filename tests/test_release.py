@@ -20,6 +20,8 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(json.loads(z.read("module.json")),manifest)
                 for entry in manifest["esmodules"]+manifest["styles"]:self.assertIn(entry,names)
                 self.assertIn("scripts/app.js",names)
+                self.assertIn("scripts/runtime.js",names)
+                self.assertIn("scripts/bootstrap.js",names)
                 self.assertFalse(any("node_modules" in name or "tests/" in name or ".github/" in name for name in names))
                 for name in names:self.assertFalse(name.startswith("/") or ".." in Path(name).parts)
 
@@ -28,3 +30,4 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):module.build("owner/repo","../../bad")
 
 if __name__=="__main__":unittest.main()
+

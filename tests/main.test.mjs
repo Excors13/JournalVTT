@@ -18,10 +18,10 @@ globalThis.document={activeElement:null};
 globalThis.window={innerWidth:1200,innerHeight:900};
 globalThis.ui={notifications:{error:message=>{throw new Error(message);}}};
 const {openCodex,toggleCodex}=await import("../scripts/main.js");
-let binding;
+let binding,menus;
 beforeEach(async()=>{
   setup();document.activeElement=null;discard=true;confirmations=0;
-  game.settings.register=()=>{};game.settings.registerMenu=()=>{};
+  menus=new Map();game.settings.register=()=>{};game.settings.registerMenu=(_id,key,value)=>menus.set(key,value);
   game.keybindings={register:(_id,_key,config)=>binding=config};
   game.modules=new Map([[ID,{version:"1.0.1"}]]);
   hooks.get("init")();
@@ -76,4 +76,27 @@ test("native ownership saves become manual exceptions and survive section synchr
   const managed={ownership:{p:2}};
   hooks.get("preUpdateJournalEntry")(doc,managed,{wcManaged:true});
   assert.equal(managed[`flags.${ID}.data.accessMode`],undefined);
+});
+
+
+
+test("players can open the keybinding settings directly from module settings",async()=>{
+  game.user=game.users.get("p");assert.equal(binding.restricted,false);assert.equal(menus.get("keybindings").restricted,false);assert.equal(menus.get("open").restricted,false);
+  let configured,rendered;
+  foundry.applications.sidebar={apps:{ControlsConfig:class {constructor(options){configured=options;}render(options){rendered=options;return this;}}}};
+  new (menus.get("keybindings").type)().render();assert.deepEqual(configured,{initialCategory:ID});assert.deepEqual(rendered,{force:true});
+});
+
+test("record deletion confirms, enforces GM permission and preserves a canceled record",async()=>{
+  const doc=await createRecord({name:"Delete",section:"world"},"<p>Text</p>"),app=await openCodex();
+  discard=false;await app.deleteRecordEntry(doc);assert.equal(game.journal.get(doc.id),doc);
+  game.user=game.users.get("t");await assert.rejects(()=>app.deleteRecordEntry(doc),/мастер/);
+  game.user=game.users.get("gm");discard=true;await app.deleteRecordEntry(doc);assert.equal(game.journal.get(doc.id),undefined);
+});
+
+test("v14 context menus retain ownership and expose folder/record deletion only to the GM",async()=>{
+  const app=await openCodex(),menus=[];app._createContextMenu=(entries,selector)=>menus.push({entries:entries(),selector});
+  app.registerContextMenus();assert(menus.find(m=>m.selector===".wc-page[data-record]").entries.some(e=>e.label==="Настроить доступ"));
+  assert(menus.find(m=>m.selector==="summary[data-codex-folder]").entries.some(e=>e.label==="Удалить папку"));
+  game.user=game.users.get("p");menus.length=0;app.registerContextMenus();assert.equal(menus.length,1);assert.equal(menus[0].selector,".wc-page[data-diary-page]");
 });

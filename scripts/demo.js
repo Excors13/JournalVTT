@@ -13,3 +13,4 @@ export async function createDemo(){
   await createRecord({name:"Северное пограничье",section:"maps",image:`modules/${ID}/assets/demo-map.svg`,map:{pins:[{id:uid(),type:"fortress",name:"Старый дозор",uuid:location.uuid,x:.58,y:.47},{id:uid(),type:"unknown",name:"Тишина у переправы",uuid:quest.uuid,x:.38,y:.25}],labels:[{id:uid(),text:"Седые хребты",x:.66,y:.17,size:21,italic:true,angle:-4,color:"#40351e",outline:false},{id:uid(),text:"Старая чаща",x:.365,y:.36,size:18,italic:true,color:"#40351e",outline:false},{id:uid(),text:"Северное море",x:.075,y:.54,size:20,italic:true,angle:-90,color:"#f0e8d4",outline:true}]}},"");
   return game.journal.filter(d=>meta(d)?.kind==="record");
 }
+

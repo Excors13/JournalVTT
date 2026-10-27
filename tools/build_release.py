@@ -5,10 +5,13 @@ import json
 import re
 import zipfile
 from pathlib import Path
+import importlib.util
 
 ROOT = Path(__file__).resolve().parents[1]
 
 def build(repo=None, version=None, out=None):
+    spec=importlib.util.spec_from_file_location("build_runtime",ROOT/"tools/build_runtime.py")
+    runtime=importlib.util.module_from_spec(spec);spec.loader.exec_module(runtime);runtime.build()
     manifest=json.loads((ROOT/"module.json").read_text(encoding="utf-8"))
     version=(version or manifest["version"]).removeprefix("v")
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?",version):
@@ -39,3 +42,4 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--repo");parser.add_argument("--version");parser.add_argument("--out")
     build(**vars(parser.parse_args()))
+

@@ -1,9 +1,9 @@
 import {ID,defaultPolicies} from "./model.js";
 import {meta,fullGM,activeManager,provisionDiaries,synchronizeOwnership,migrateRecords} from "./store.js";
-import {button,report} from "./dom.js";
+import {report} from "./dom.js";
 import {CodexApp} from "./app.js";
-import {CodexSettings} from "./settings.js";
-import {hideNativeCodex} from "./experience.js";
+import {CodexSettings,CodexKeybindings} from "./settings.js";
+import {mountCodexLauncher} from "./experience.js";
 import {QuestNotices} from "./notifications.js";
 import {handleCreationRequest} from "./creation.js";
 
@@ -19,7 +19,7 @@ export async function toggleCodex(){
   try{if(app?.rendered)await app.close();else await openCodex();}finally{toggling=false;}
 }
 function onCodexKey(context={}){
-  // Keep J available inside chat, form fields and the native journal editor.
+  // Leave typing to chat, form fields and the native journal editor.
   const typing="input,textarea,select,[contenteditable]:not([contenteditable='false']),prose-mirror";
   const targets=[document.activeElement,...(context.event?.composedPath?.()||[])];
   if(targets.some(target=>target?.closest?.(typing)))return false;
@@ -34,19 +34,29 @@ function queueSync(){
     syncQueue=syncQueue.then(async()=>{await migrateRecords();await provisionDiaries();await synchronizeOwnership();}).catch(report);
   },200);
 }
-Hooks.once("init",()=>{
+function initializeCodex(){
+  const module=game.modules.get(ID);if(module.__codexInitialized)return;
   game.settings.register(ID,"fontSize",{name:"Размер текста кодекса",hint:"Личная настройка основного текста страниц.",scope:"client",config:true,type:Number,range:{min:12,max:22,step:1},default:14,onChange:value=>app?.applyFont(value)});
   game.settings.register(ID,"policies",{name:"Права разделов",scope:"world",config:false,type:Object,default:defaultPolicies()});
   game.settings.registerMenu(ID,"open",{name:"Кодекс мира",label:"Открыть кодекс",hint:"Мир, задания, бестиарий и личные дневники.",icon:"fa-solid fa-book-open",type:CodexMenu,restricted:false});
+  game.settings.registerMenu(ID,"keybindings",{name:"Клавиша открытия кодекса",label:"Выбрать клавишу",hint:"Личный бинд открытия и закрытия кодекса. По умолчанию J; можно выбрать другую клавишу или сочетание. Сохраните назначение в открывшемся окне управления.",icon:"fa-solid fa-keyboard",type:CodexKeybindings,restricted:false});
   game.settings.registerMenu(ID,"access",{name:"Владение по умолчанию",label:"Настроить доступ по ролям",hint:"Уровни владения разделами для ролей Foundry VTT.",icon:"fa-solid fa-key",type:CodexSettings,restricted:true});
-  game.keybindings.register(ID,"open",{name:"Открыть / закрыть кодекс мира",hint:"J переключает окно кодекса. При вводе текста клавиша печатает букву.",editable:[{key:"KeyJ"}],onDown:onCodexKey,repeat:false,precedence:CONST.KEYBINDING_PRECEDENCE.PRIORITY,restricted:false});
-  game.modules.get(ID).api={open:openCodex,toggle:toggleCodex,openRecord:uuid=>openCodex(uuid),version:game.modules.get(ID).version};
-});
-Hooks.once("ready",()=>{notices.seed(game.journal);queueSync();});
-Hooks.on("renderJournalDirectory",(_app,html)=>{
-  const root=html instanceof HTMLElement?html:html?.[0];if(!root)return;hideNativeCodex(root);if(root.querySelector(".world-codex-launcher"))return;
-  const b=button("Кодекс мира",()=>openCodex(),{icon:"book-open",cls:"world-codex-launcher"});
-  (root.querySelector(".header-actions")||root.querySelector(".directory-header")||root).prepend(b);
+  if(!module.__codexBindingRegistered)game.keybindings.register(ID,"open",{name:"Открыть / закрыть кодекс мира",hint:"Выбранное сочетание переключает окно кодекса. По умолчанию J (О в русской раскладке). При вводе текста клавиша не перехватывается.",editable:[{key:"KeyJ"}],onDown:onCodexKey,repeat:false,precedence:CONST.KEYBINDING_PRECEDENCE.PRIORITY,restricted:false});
+  module.api=Object.assign(module.api||{},{open:openCodex,toggle:toggleCodex,openRecord:uuid=>openCodex(uuid),version:module.version});
+  module.__codexInitialized=true;
+}
+function activateCodex(){
+  const module=game.modules.get(ID);if(module.__codexReady)return;
+  notices.seed(game.journal);queueSync();mountCodexLauncher(ui.journal?.element,openCodex);module.__codexReady=true;
+}
+// The standalone loader may recover after Foundry's once-only hooks have passed.
+export function resumeCodex(){initializeCodex();if(game.ready)activateCodex();}
+Hooks.once("init",initializeCodex);
+Hooks.once("ready",activateCodex);
+Hooks.on("renderJournalDirectory",(_app,html)=>mountCodexLauncher(html,openCodex));
+// UI replacements can subclass the directory or render it before the ready hook.
+Hooks.on("renderApplicationV2",(directory,html)=>{
+  if(directory?.collection===game.journal||directory?.id==="journal"||directory?.tabName==="journal")mountCodexLauncher(html,openCodex);
 });
 Hooks.on("createJournalEntry",doc=>notices.created(doc));
 Hooks.on("updateJournalEntry",doc=>notices.updated(doc));
@@ -64,3 +74,4 @@ Hooks.on("updateUser",(_user,changes)=>{if(Object.hasOwn(changes,"role")||Object
 Hooks.on("updateUser",(user,changes,options,userId)=>{handleCreationRequest(user,changes,options,userId)?.catch(report);});
 Hooks.on("updateSetting",setting=>{if(setting.key===`${ID}.policies`)app?.onWorldChange(null);});
 Hooks.on("userConnected",queueSync);
+

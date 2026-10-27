@@ -62,3 +62,4 @@ test("access indicator summarizes explicit users and section exceptions",async()
   await doc.update({ownership:{p:0},[`flags.${ID}.data.accessMode`]:"manual"});
   assert.match(accessSummary(doc).label,/1\/2.*Индивидуально/);assert.match(accessSummary(doc).title,/Player: Нет доступа/);
 });
+

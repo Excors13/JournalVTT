@@ -24,3 +24,4 @@ export function showQuestNotice(doc){
   toast.append(button("",remove,{icon:"xmark",title:"Закрыть уведомление"}));host.append(toast);live.set(doc.id,{toast,timer:setTimeout(remove,5000)});
   while(live.size>3){const [id,item]=live.entries().next().value;clearTimeout(item.timer);item.toast.remove();live.delete(id);}
 }
+

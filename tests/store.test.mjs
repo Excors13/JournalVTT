@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {setup,MockDocument} from "./fixtures.mjs";
-import {ID,defaultPolicies} from "../scripts/model.js";
+import {ID,defaultPolicies,sameOwnership} from "../scripts/model.js";
 import {createRecord,saveRecord,synchronizeOwnership,provisionDiaries,visibleDiaries,visibleRecords,saveDiary,versionOf,meta,useSectionOwnership} from "../scripts/store.js";
 
 test("role changes update inherited ownership and preserve native manual exceptions",async()=>{
@@ -18,7 +18,8 @@ test("defaults-only edits stay defaults-only across later synchronization",async
 });
 test("private diaries are created once per player, without any other explicit grants",async()=>{
   setup();await provisionDiaries();await provisionDiaries();const diaries=game.journal.filter(d=>meta(d)?.kind==="diary");assert.equal(diaries.length,2);
-  const own=diaries.find(d=>meta(d).ownerId==="p");own.ownership.t=3;await provisionDiaries();assert.deepEqual(own.ownership,{default:0,p:3});
+  const own=diaries.find(d=>meta(d).ownerId==="p");own.ownership.t=3;await provisionDiaries();assert(sameOwnership(own.ownership,{default:0,p:3}));assert.equal(own.ownership.t,0);
+  const repaired=versionOf(own);await provisionDiaries();assert.equal(versionOf(own),repaired);
   game.user=game.users.get("p");assert.equal(visibleDiaries().length,1);assert.equal(meta(visibleDiaries()[0]).ownerId,"p");
 });
 test("player writes own diary without permission to create top-level journals",async()=>{
@@ -55,4 +56,33 @@ test("facts survive edits, managed folder order persists, and migrations preserv
   setup();const {saveFolder,moveRecord,folderIdOf,migrateRecords}=await import("../scripts/store.js");
   const f=await saveFolder("world","Хроника"),a=await createRecord({name:"A",section:"world",folderId:f.id,facts:[{label:"Тема",value:"Религии"}]},"<h2>Обряды</h2><p>Текст</p>"),b=await createRecord({name:"B",section:"world",folderId:f.id},"");await moveRecord(b,f.id,a.id);assert(b.sort<a.sort);assert.equal(meta(a).facts[0].label,"Тема");
   const old=new MockDocument({name:"Legacy",folder:folderIdOf(a),ownership:{default:0},pages:[{type:"text",text:{content:"<h2>Old</h2>"}}],flags:{[ID]:{data:{kind:"record",section:"world",schema:1,folder:"Старое/Вложенное"}}}});game.journal.push(old);await migrateRecords();assert.equal(meta(old).schema,2);assert.equal(old.pages[0].text.content,"<h2>Old</h2>");assert.equal(game.folders.get(folderIdOf(old)).name,"Вложенное");
+});
+
+
+test("folder deletion preserves journals, nested folders, UUIDs and permissions",async()=>{
+  setup();const {saveFolder,deleteFolder,deleteRecord,folderIdOf}=await import("../scripts/store.js");
+  const parent=await saveFolder("world","Parent"),folder=await saveFolder("world","Delete me",parent.id),child=await saveFolder("world","Child",folder.id);
+  const direct=await createRecord({name:"Direct",section:"world",folderId:folder.id},"<p>Keep</p>"),nested=await createRecord({name:"Nested",section:"world",folderId:child.id},"<p>Also keep</p>");
+  const uuid=direct.uuid,ownership=structuredClone(direct.ownership);
+  game.user=game.users.get("t");await assert.rejects(()=>deleteFolder(folder),/мастер/);await assert.rejects(()=>deleteRecord(direct),/мастер/);
+  game.user=game.users.get("gm");const root=game.folders.find(f=>f.getFlag(ID,"root"));await assert.rejects(()=>deleteFolder(root),/мастер/);
+  const destination=await deleteFolder(folder);assert.equal(destination,parent.id);assert.equal(game.folders.get(folder.id),undefined);
+  assert.equal(folderIdOf(direct),parent.id);assert.equal(folderIdOf(child),parent.id);assert.equal(folderIdOf(nested),child.id);assert.equal(direct.uuid,uuid);assert.deepEqual(direct.ownership,ownership);assert.equal(game.journal.length,2);
+  await deleteRecord(direct);assert.equal(game.journal.get(direct.id),undefined);assert.equal(game.journal.get(nested.id),nested);
+});
+
+test("partial folder move failure does not delete the folder or any contents",async()=>{
+  setup();const {saveFolder,deleteFolder}=await import("../scripts/store.js");
+  const folder=await saveFolder("world","Folder"),doc=await createRecord({name:"Protected",section:"world",folderId:folder.id},"");
+  doc.update=async()=>{throw new Error("Server refused move");};await assert.rejects(()=>deleteFolder(folder),/refused/);
+  assert.equal(game.folders.get(folder.id),folder);assert.equal(game.journal.get(doc.id),doc);
+});
+
+test("startup maintenance batches diary creation and skips unchanged documents",async()=>{
+  setup();let batches=0,updates=0;const create=JournalEntry.createDocuments,update=JournalEntry.updateDocuments;
+  JournalEntry.createDocuments=async(...args)=>{batches++;return create(...args);};JournalEntry.updateDocuments=async(...args)=>{updates++;return update(...args);};
+  await provisionDiaries();assert.equal(batches,1);assert.equal(updates,0);
+  for(const doc of game.journal)doc.ownership.intruder=3;
+  await provisionDiaries();assert.equal(updates,1);assert(game.journal.every(doc=>doc.ownership.intruder===0));
+  await provisionDiaries();assert.equal(batches,1);assert.equal(updates,1);
 });

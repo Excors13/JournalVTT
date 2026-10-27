@@ -90,3 +90,4 @@ export class MapView {
   visibilityField(fields,draft){if(!game.user.isGM)return;const wrap=node("label","wc-checkline"),input=node("input");input.type="checkbox";input.checked=Boolean(draft.hidden);input.setAttribute("aria-label","Скрыть от игроков");input.addEventListener("change",()=>draft.hidden=input.checked);wrap.append(input,node("span","","Скрыть от игроков"));fields.append(wrap);}
   async fullscreen(){if(document.fullscreenElement===this.root){await document.exitFullscreen();return;}try{if(this.root.requestFullscreen)await this.root.requestFullscreen();else throw new Error("unsupported");}catch{this.app.windowMode.toggle();}}
 }
+

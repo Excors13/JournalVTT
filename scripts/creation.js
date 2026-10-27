@@ -59,3 +59,4 @@ export async function waitForCreated(type,id){
     if(collection.get(id)){clearTimeout(timer);Hooks.off(event,hook);resolve(collection.get(id));}
   });
 }
+

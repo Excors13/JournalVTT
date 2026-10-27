@@ -3,6 +3,10 @@ import {fullGM,policies,synchronizeOwnership,provisionDiaries} from "./store.js"
 import {CodexBase} from "./base-app.js";
 import {node,button,selectField,report} from "./dom.js";
 
+export class CodexKeybindings extends foundry.applications.api.ApplicationV2 {
+  render(){return new foundry.applications.sidebar.apps.ControlsConfig({initialCategory:ID}).render({force:true});}
+}
+
 export class CodexSettings extends CodexBase {
   static DEFAULT_OPTIONS={id:"world-codex-settings",position:{width:760,height:650},window:{title:"Кодекс мира — Владение по умолчанию"}};
   async _renderHTML() {
@@ -33,3 +37,4 @@ export class CodexSettings extends CodexBase {
     });root.append(form);return root;
   }
 }
+
