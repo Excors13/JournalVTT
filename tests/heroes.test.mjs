@@ -55,3 +55,8 @@ test('hero permissions have an independent settings row initialized from legacy 
   const env=setup(),old=defaultPolicies();delete old.heroes;old.characters={1:3,2:2};env.setRules(old);dom();const settings=new CodexSettings(),root=await settings._renderHTML(),nodes=root.all();
   assert(nodes.some(n=>n.tag==='h3'&&n.textContent==='Герои'));const selects=nodes.filter(n=>n.tag==='select'&&n.dataset.section==='heroes');assert.deepEqual(selects.map(n=>n.value),['3','2']);assert.equal(policies().characters[1],3);
 });
+
+test('access badges and permission tooltips are only rendered for the full GM, even when players own the record',async()=>{
+  setup();dom();const doc=await createRecord({name:'Shared',section:'heroes'},'');doc.ownership.p=doc.ownership.t=3;
+  for(const id of ['p','t','gm']){game.user=game.users.get(id);const b=new CodexApp().pageButton(doc),badges=b.all().filter(n=>n.className==='wc-access-badge');assert.equal(badges.length,id==='gm'?1:0);assert.equal(Boolean(b.title),id==='gm');}
+});

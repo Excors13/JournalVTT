@@ -25,7 +25,7 @@ for(const [engine,name] of [[chromium,'Chromium'],[firefox,'Firefox'],[webkit,'W
    const ctx=await browser.newContext(),page=await ctx.newPage(),runtimeRequests=[];page.on('request',r=>{if(new URL(r.url()).pathname==='/scripts/runtime.js')runtimeRequests.push(r.url());});await ready(page,base+'/?role='+role);assert.equal(runtimeRequests.length,1);assert(await page.locator('.world-codex-launcher').isVisible());
    if(role!=='gm'){assert.equal(await page.locator('.folder.wc-native').count(),0);assert.equal(await page.locator('.directory-list .directory-item').count(),1);}
    await page.locator('.world-codex-launcher').click();await page.waitForSelector('#world-codex');assert.equal(await page.locator('#world-codex h1').textContent(),'Find the masks');
-   await checkNavigationLayout(page);
+   await checkNavigationLayout(page);assert.equal(await page.locator(".wc-access-badge").count(),role==='gm'?1:0);
    await page.keyboard.press('j');await page.waitForSelector('#world-codex',{state:'detached'});await page.keyboard.press('j');await page.waitForSelector('#world-codex');
    await page.locator('#chat').focus();await page.keyboard.type('j');assert.equal(await page.locator('#chat').inputValue(),'j');assert(await page.locator('#world-codex').isVisible());await page.locator('#chat').blur();
    await page.evaluate(()=>game.keybindings.set('world-codex','open',[{key:'KeyK',modifiers:['SHIFT']}])) ;await page.keyboard.press('j');assert(await page.locator('#world-codex').isVisible());await page.keyboard.press('Shift+k');await page.waitForSelector('#world-codex',{state:'detached'});await page.keyboard.press('Shift+k');await page.waitForSelector('#world-codex');
@@ -54,17 +54,48 @@ for(const [engine,name] of [[chromium,'Chromium'],[firefox,'Firefox'],[webkit,'W
    await page.locator('.wc-heroes-button').click();await page.waitForFunction(()=>document.querySelector('#world-codex h1')?.textContent==='Remembered hero');assert.equal(await page.locator('.wc-main-tabs > button').count(),7);assert.equal(await page.locator('.wc-heroes-button').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.wc-main-tabs').getByText('Герои',{exact:true}).count(),0);
    await page.locator('.wc-diary-button').click();await page.waitForFunction(()=>document.querySelector('.wc-diary-button')?.getAttribute('aria-pressed')==='true');await page.locator('.wc-heroes-button').click();await page.waitForFunction(()=>document.querySelector('#world-codex h1')?.textContent==='Remembered hero');
    await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
-   if(role==='gm'){
-    await page.getByRole('button',{name:'Редактировать',exact:true}).click();await page.locator('.wc-frame-preview img').waitFor({state:'visible'});
-    const box=await page.locator('.wc-frame-preview').boundingBox();assert(Math.abs(box.width/box.height-5/6)<0.01);
-    await page.getByLabel('Размещение',{exact:true}).selectOption('contain');
-    for(const [key,value] of [['zoom','2'],['x','0.2']])await page.locator(`[data-frame-control="${key}"]`).evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},value);
-    const preview=await page.locator('.wc-frame-preview img').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top}));
-    await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.waitForSelector('.wc-frame-preview',{state:'detached'});await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
-    assert.deepEqual(await page.locator('.wc-art img.wc-framed-image').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top})),preview);
-    assert.deepEqual(await page.evaluate(()=>game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame),{fit:'contain',zoom:2,x:0.2,y:0.5});
+   assert.equal(await page.locator('.wc-access-badge').count(),role==='gm'?1:0);
+   await page.locator('.wc-image-open').click();assert.deepEqual(await page.evaluate(()=>({src:imagePopout.src,uuid:imagePopout.uuid,title:imagePopout.window.title})),{src:'/assets/demo-map.svg',uuid:await page.evaluate(()=>game.journal.get(fixture.heroId).uuid),title:'Remembered hero'});
+   await page.getByRole('button',{name:'Редактировать',exact:true}).click();assert.equal(await page.locator('#world-codex .wc-frame-preview').count(),0);assert.equal(await page.locator('#world-codex input[aria-label="Изображение"]').count(),0);
+   const original=await page.evaluate(()=>structuredClone(game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame));
+   await page.getByRole('button',{name:'Редактировать изображение',exact:true}).click();await page.locator('.wc-crop-source').waitFor({state:'visible'});await page.locator('.wc-frame-preview img').waitFor({state:'visible'});
+   const dialog=page.locator('#world-codex-image-editor');assert(await dialog.isVisible());
+   await dialog.getByRole('button',{name:'Уменьшить рамку',exact:true}).click();await dialog.getByRole('button',{name:'Отмена',exact:true}).click();await dialog.waitFor({state:'detached'});
+   assert.deepEqual(await page.evaluate(()=>game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame),original);
+   await page.getByRole('button',{name:'Редактировать изображение',exact:true}).click();await page.locator('.wc-crop-source').waitFor({state:'visible'});
+   const range=page.locator('[data-frame-control="zoom"]');assert.equal(await range.inputValue(),'1');await range.evaluate(el=>{el.value='2';el.dispatchEvent(new Event('input',{bubbles:true}));});
+   const selection=page.locator('.wc-crop-selection');let rect=await selection.boundingBox();assert(Math.abs(rect.width/rect.height-5/6)<0.001);
+   const beforePan=await page.locator('.wc-frame-preview img').evaluate(el=>el.style.left);await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();await page.mouse.move(rect.x+rect.width/2+20,rect.y+rect.height/2+15,{steps:4});await page.mouse.up();
+   const movedPreview=await page.locator('.wc-frame-preview img').evaluate(el=>el.style.left);assert.notEqual(movedPreview,beforePan);
+   for(const corner of ['nw','ne','sw','se']){
+    const handle=await page.locator('.wc-crop-'+corner).boundingBox(),before=Number(await range.inputValue()),sx=corner.includes('e')?1:-1,sy=corner.includes('s')?1:-1;
+    await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(handle.x+handle.width/2+sx*8,handle.y+handle.height/2+sy*9.6,{steps:3});await page.mouse.up();assert(Number(await range.inputValue())<before);
+    rect=await selection.boundingBox();assert(Math.abs(rect.width/rect.height-5/6)<0.001);
    }
-   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, permission checks and separate heroes catalog`,passed:true});await ctx.close();
+   await selection.focus();const beforeKey=await page.locator('.wc-frame-preview img').evaluate(el=>el.style.left);await page.keyboard.press('ArrowRight');assert.notEqual(await page.locator('.wc-frame-preview img').evaluate(el=>el.style.left),beforeKey);
+   for(const width of [850,500]){
+    await dialog.evaluate((el,w)=>el.style.width=w+'px',width);await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+    const layout=await dialog.evaluate(el=>{const stage=el.querySelector('.wc-crop-stage').getBoundingClientRect(),actions=el.querySelector('.wc-image-actions').getBoundingClientRect(),root=el.getBoundingClientRect();return {stage:stage.height,overflow:el.querySelector('.wc-image-dialog').scrollWidth>root.width,actionsBottom:actions.bottom,bottom:root.bottom};});assert(layout.stage>150);assert(!layout.overflow);assert(layout.actionsBottom<=layout.bottom+1);
+   }
+   const preview=await page.locator('.wc-frame-preview img').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top}));
+   await dialog.getByRole('button',{name:'Применить',exact:true}).click();await dialog.waitFor({state:'detached'});
+   assert.deepEqual(await page.evaluate(()=>game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame),original,'Apply must not write the journal until Save');
+   await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.locator('#world-codex .wc-editor').waitFor({state:'detached'});await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
+   assert.deepEqual(await page.locator('.wc-art img.wc-framed-image').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top})),preview);
+   assert.equal(await page.locator('.wc-access-badge').count(),role==='gm'?1:0);
+
+   if(role==='gm'){
+    await page.getByRole('button',{name:'Редактировать',exact:true}).click();await page.getByRole('button',{name:'Редактировать изображение',exact:true}).click();await page.locator('.wc-crop-source').waitFor({state:'visible'});
+    await dialog.getByLabel('Изображение',{exact:true}).fill('/assets/icons/city.svg');await dialog.getByLabel('Изображение',{exact:true}).blur();await page.waitForFunction(()=>{const img=document.querySelector('.wc-crop-source');return img?.getAttribute('src')==='/assets/icons/city.svg'&&img.naturalWidth>0&&!img.hidden;});
+    await dialog.getByRole('button',{name:'Применить',exact:true}).click();await dialog.waitFor({state:'detached'});await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.locator('.wc-image-open img').waitFor({state:'visible'});assert.equal(await page.locator('.wc-image-open img').getAttribute('src'),'/assets/icons/city.svg');
+    await page.getByRole('button',{name:'Редактировать',exact:true}).click();await page.getByRole('button',{name:'Редактировать изображение',exact:true}).click();await dialog.getByRole('button',{name:'Убрать изображение',exact:true}).click();await dialog.waitFor({state:'detached'});await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.locator('#world-codex .wc-editor').waitFor({state:'detached'});assert.equal(await page.locator('.wc-image-open').count(),0);assert.equal(await page.evaluate(()=>game.journal.get(fixture.heroId).getFlag('world-codex','data').image),'');
+   }
+   if(role==='gm'){
+    await page.evaluate(async()=>{const store=await import('/scripts/store.js');const doc=await store.createRecord({name:'Full map',section:'maps',image:'/assets/demo-map.svg'},'');await game.modules.get('world-codex').api.open(doc.uuid);});
+    await page.getByRole('button',{name:'Свойства',exact:true}).click();assert(await page.getByLabel('Изображение карты',{exact:true}).isVisible());assert.equal(await page.locator('.wc-edit-image:visible').count(),0);
+    await page.getByLabel('Изображение карты',{exact:true}).fill('/assets/icons/city.svg');await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.locator('.wc-map-image').waitFor({state:'visible'});assert.equal(await page.locator('.wc-map-image').getAttribute('src'),'/assets/icons/city.svg');
+   }
+   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, GM-only access badges, heroes, separate image editor, crop controls, cancellation, save and native image opening`,passed:true});await ctx.close();
   }
   const ctx=await browser.newContext(),failed=await ctx.newPage();let attempts=0;
   await failed.route('**/scripts/runtime.js?*',async route=>{attempts++;if(attempts<=2)await route.fulfill({status:429,body:'Too Many Requests',contentType:'text/plain'});else await route.continue();});
