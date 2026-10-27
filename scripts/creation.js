@@ -31,7 +31,7 @@ export function handleCreationRequest(user,_changes,_options,writerId){
 
 export async function requestCreation(action,input){
   if(!canCreateInSection(input.section))throw new Error("Нет права создания в этом разделе.");
-  if(!game.users.some(u=>u.active&&fullGM(u)))throw new Error("Для создания журнала или папки войдите в мир вместе с мастером: этой роли Foundry не разрешает создавать документы напрямую.");
+  if(!game.users.some(u=>u.active&&fullGM(u)))throw new Error("Для создания с правами раздела войдите в мир вместе с мастером.");
   const user=game.user,request={id:uid(),action,section:input.section,name:action==="record"?"Новый журнал":String(input.name||"").trim().slice(0,80)};
   if(action==="record")request.folderId=input.folderId||null;else if(action==="folder")request.parentId=input.parentId||null;else throw new Error("Неизвестное действие создания.");
   let timer,listener;

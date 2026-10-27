@@ -16,6 +16,29 @@ test("defaults-only edits stay defaults-only across later synchronization",async
   const newer=await createRecord({name:"New",section:"world"},"");assert.equal(newer.ownership.t,0);
   await synchronizeOwnership({applyDefaults:true});assert.equal(doc.ownership.t,0);
 });
+test("explicit application of section defaults repairs creator-only records while preserving marked manual exceptions",async()=>{
+  const env=setup(),rules=defaultPolicies();rules.characters={1:3,2:3};env.setRules(rules);
+  const broken=await createRecord({name:'Player entry',section:'characters'},'<p>Keep body</p>'),manual=await createRecord({name:'Exception',section:'characters'},'');
+  broken.ownership={default:0,p:3};manual.flags[ID].data.accessMode='manual';manual.ownership={default:0,t:3};
+  await synchronizeOwnership({applyDefaults:true});assert.deepEqual(broken.ownership,{default:0,gm:3,p:3,t:3});assert.equal(meta(broken).accessMode,'section');assert.equal(broken.pages[0].text.content,'<p>Keep body</p>');assert.deepEqual(manual.ownership,{default:0,t:3});
+});
+test("GM-created journals assign every role member the section defaults at all permission levels",async()=>{
+  const env=setup();game.users.push({id:'p2',role:1,isGM:false,active:false},{id:'t2',role:2,isGM:false,active:false},{id:'blocked',role:0,isGM:false,active:false});
+  for(const [player,trusted] of [[0,3],[1,2],[2,1],[3,0]]){
+    const rules=defaultPolicies();rules.characters={1:player,2:trusted};env.setRules(rules);
+    const doc=await createRecord({name:`Grants ${player}/${trusted}`,section:'characters'},'');
+    assert.deepEqual(doc.ownership,{default:0,gm:3,p:player,t:trusted,p2:player,t2:trusted,blocked:0});assert.equal(meta(doc).accessMode,'section');assert.deepEqual(meta(doc).managedOwnership,doc.ownership);
+  }
+});
+test("creation verifies actual persisted ownership after other hooks and avoids extra writes when correct",async()=>{
+  setup();let repair=false,writes=0;const create=JournalEntry.create;
+  JournalEntry.create=async(data,options)=>{
+    const doc=await create(repair?{...data,ownership:{default:0,gm:3,unexpected:3}}:data,options),update=doc.update.bind(doc);
+    doc.update=async(changes,options)=>{writes++;assert.equal(options.wcManaged,true);return update(changes,options);};return doc;
+  };
+  await createRecord({name:'Already correct',section:'world'},'');assert.equal(writes,0);repair=true;
+  const fixed=await createRecord({name:'Overridden by another hook',section:'world'},'<p>Keep</p>');assert.equal(writes,1);assert.equal(fixed.ownership.p,2);assert.equal(fixed.ownership.t,3);assert.equal(fixed.ownership.unexpected,0);assert.equal(meta(fixed).accessMode,'section');assert.equal(fixed.pages[0].text.content,'<p>Keep</p>');
+});
 test("private diaries are created once per player, without any other explicit grants",async()=>{
   setup();await provisionDiaries();await provisionDiaries();const diaries=game.journal.filter(d=>meta(d)?.kind==="diary");assert.equal(diaries.length,2);
   const own=diaries.find(d=>meta(d).ownerId==="p");own.ownership.t=3;await provisionDiaries();assert(sameOwnership(own.ownership,{default:0,p:3}));assert.equal(own.ownership.t,0);

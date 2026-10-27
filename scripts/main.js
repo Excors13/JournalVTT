@@ -59,12 +59,13 @@ Hooks.on("renderApplicationV2",(directory,html)=>{
   if(directory?.collection===game.journal||directory?.id==="journal"||directory?.tabName==="journal")mountCodexLauncher(html,openCodex);
 });
 Hooks.on("createJournalEntry",doc=>notices.created(doc));
+Hooks.on("createJournalEntry",doc=>{if(meta(doc)?.ownershipPending||meta(doc)?.folderPending)queueSync();});
 Hooks.on("updateJournalEntry",doc=>notices.updated(doc));
 Hooks.on("deleteJournalEntry",doc=>notices.deleted(doc));
 Hooks.on("preUpdateJournalEntry",(doc,changes,options)=>{
   // A change made through Foundry's native ownership dialog is a manual exception.
   if(!fullGM()||options.wcManaged||meta(doc)?.kind!=="record")return;
-  if(Object.hasOwn(changes,"ownership")||Object.keys(changes).some(k=>k.startsWith("ownership.")))changes[`flags.${ID}.data.accessMode`]="manual";
+  if(Object.hasOwn(changes,"ownership")||Object.keys(changes).some(k=>k.startsWith("ownership."))){changes[`flags.${ID}.data.accessMode`]="manual";changes[`flags.${ID}.data.ownershipPending`]=false;changes[`flags.${ID}.data.folderPending`]=false;}
 });
 for(const event of ["createJournalEntry","updateJournalEntry","deleteJournalEntry"])Hooks.on(event,doc=>app?.onWorldChange(doc));
 for(const event of ["createJournalEntryPage","updateJournalEntryPage","deleteJournalEntryPage"])Hooks.on(event,page=>app?.onWorldChange(page.parent));

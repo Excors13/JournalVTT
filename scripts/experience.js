@@ -1,4 +1,4 @@
-import {ID,SECTIONS,LEVELS} from "./model.js";
+import {ID,CATALOGS,LEVELS} from "./model.js";
 import {meta,readable} from "./store.js";
 import {sanitizeHTML,node,icon,button} from "./dom.js";
 
@@ -28,13 +28,14 @@ export function accessSummary(doc){
   const groups={read:[],write:[],limited:[],none:[]};
   for(const user of players){const level=Number(doc.ownership?.[user.id]??doc.ownership?.default??0);groups[level===3?"write":level===2?"read":level===1?"limited":"none"].push(user.name);}
   const title=players.map(u=>`${u.name}: ${LEVELS[Number(doc.ownership?.[u.id]??doc.ownership?.default??0)]||LEVELS[0]}`).join("\n");
-  return {label:`Читают ${groups.write.length+groups.read.length}/${players.length} · ${meta(doc)?.accessMode==="section"?"Права раздела":"Индивидуально"}`,title};
+  const mode=meta(doc)?.accessMode==="section"?(meta(doc)?.ownershipPending?"Права ожидают мастера":"Права раздела"):"Индивидуально";
+  return {label:`Читают ${groups.write.length+groups.read.length}/${players.length} · ${mode}`,title};
 }
 
 export function searchRecords(records,query){
   const words=String(query).toLocaleLowerCase("ru").trim().split(/\s+/).filter(Boolean);
   return records.filter(({doc,meta:m})=>{
-    let text=`${doc.name} ${SECTIONS[m.section]}`;
+    let text=`${doc.name} ${CATALOGS[m.section]}`;
     if(readable(doc)){
       const template=document.createElement("template");
       template.innerHTML=sanitizeHTML(doc.pages.filter(p=>p.type==="text"&&p.testUserPermission(game.user,"OBSERVER")).map(p=>p.text?.content||"").join(" "),{secrets:doc.isOwner});

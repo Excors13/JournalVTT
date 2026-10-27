@@ -1,4 +1,4 @@
-import {ID,SCHEMA,SECTIONS,OBJECTIVE_STATES,copy,normalizePolicies,roleOwnership,diaryOwnership,sameOwnership,ownershipPatch,cleanRecord,cleanMap} from "./model.js";
+import {ID,SCHEMA,CATALOGS,OBJECTIVE_STATES,copy,normalizePolicies,roleOwnership,diaryOwnership,sameOwnership,ownershipPatch,cleanRecord,cleanMap} from "./model.js";
 
 export const meta = doc => doc?.getFlag(ID,"data");
 export const fullGM = (user=game.user) => Number(user?.role)===4;
@@ -6,9 +6,9 @@ export const readable = doc => Boolean(doc?.testUserPermission(game.user,"OBSERV
 export const editable = doc => Boolean(doc?.testUserPermission(game.user,"OWNER"));
 export const policies = () => normalizePolicies(game.settings.get(ID,"policies"));
 export function canCreateInSection(section,user=game.user){
-  return Object.hasOwn(SECTIONS,section)&&Boolean(fullGM(user)||([1,2].includes(Number(user?.role))&&policies()[section][Number(user.role)]===3));
+  return Object.hasOwn(CATALOGS,section)&&Boolean(fullGM(user)||([1,2].includes(Number(user?.role))&&policies()[section][Number(user.role)]===3));
 }
-export const managedRecords = () => game.journal.filter(d=>meta(d)?.kind==="record"&&Object.hasOwn(SECTIONS,meta(d).section));
+export const managedRecords = () => game.journal.filter(d=>meta(d)?.kind==="record"&&Object.hasOwn(CATALOGS,meta(d).section));
 export const visibleRecords = () => managedRecords().filter(d=>d.testUserPermission(game.user,"LIMITED")).map(doc=>({doc,meta:meta(doc)})).sort((a,b)=>(a.doc.sort||0)-(b.doc.sort||0)||a.doc.name.localeCompare(b.doc.name,"ru"));
 export const textPage = (doc,pageId) => pageId?doc?.pages.find(p=>p.id===pageId&&p.type==="text"):doc?.pages.find(p=>p.type==="text");
 export const getBody = (doc,pageId) => {const page=pageId?textPage(doc,pageId):doc?.pages.find(p=>p.type==="text"&&readable(p));return readable(page)?page.text?.content||"":"";};
@@ -23,12 +23,16 @@ export async function nativeFolder(section) {
   let root=game.folders.find(f=>f.type==="JournalEntry"&&f.getFlag(ID,"root"));
   if(!root)root=await CONFIG.Folder.documentClass.create({name:"Кодекс мира",type:"JournalEntry",flags:{[ID]:{root:true}}});
   let folder=game.folders.find(f=>f.type==="JournalEntry"&&f.getFlag(ID,"section")===section);
-  if(!folder)folder=await CONFIG.Folder.documentClass.create({name:section==="diary"?"Личные дневники":SECTIONS[section],type:"JournalEntry",folder:root.id,flags:{[ID]:{section}}});
+  if(!folder)folder=await CONFIG.Folder.documentClass.create({name:section==="diary"?"Личные дневники":CATALOGS[section],type:"JournalEntry",folder:root.id,flags:{[ID]:{section}}});
   return folder.id;
 }
 export async function createRecord(input, body) {
   if(!canCreateInSection(input.section))throw new Error("Для создания журнала нужен уровень «Владелец» в этом разделе.");
-  if(!fullGM()&&(!CONFIG.JournalEntry.documentClass.canUserCreate?.(game.user)||!validFolder(input.folderId,input.section)&&!game.folders.some(f=>f.getFlag(ID,"section")===input.section))){
+  const directPlayer=!fullGM()&&!game.users.some(u=>u.active&&fullGM(u));
+  if(directPlayer&&!CONFIG.JournalEntry.documentClass.canUserCreate?.(game.user))throw new Error("Мастер не подключён, а для вашей роли в Foundry выключено «Создание журналов». Попросите мастера один раз включить это разрешение.");
+  // With a GM online, creation applies all section grants immediately. Without
+  // one, use the player's native create permission and keep any deferred grants.
+  if(!fullGM()&&!directPlayer){
     const {requestCreation,waitForCreated}=await import("./creation.js");
     const result=await requestCreation("record",{name:input.name,section:input.section,folderId:input.folderId||null});
     const doc=await waitForCreated("JournalEntry",result.id);
@@ -39,7 +43,14 @@ export async function createRecord(input, body) {
   const data=cleanRecord(input),ownership=roleOwnership(policies(),data.section,game.users.contents);
   const destination=validFolder(input.folderId,data.section)||await nativeFolder(data.section);
   const sort=Math.max(0,...managedRecords().filter(d=>meta(d).section===data.section).map(d=>d.sort||0))+100000;
-  const doc=await CONFIG.JournalEntry.documentClass.create({name:input.name.trim(),sort,folder:destination,ownership,pages:[{name:"Текст",type:"text",text:{format:1,content:body}}],flags:{[ID]:{data:{...data,accessMode:"section",rolePolicy:policies()[data.section],managedOwnership:copy(ownership)}}}},{wcManaged:true});
+  const doc=await CONFIG.JournalEntry.documentClass.create({name:input.name.trim(),sort,folder:destination,ownership,pages:[{name:"Текст",type:"text",text:{format:1,content:body}}],flags:{[ID]:{data:{...data,accessMode:"section",rolePolicy:policies()[data.section],managedOwnership:copy(ownership),...(directPlayer?{creatorId:game.user.id,ownershipPending:true,folderPending:!destination}:{})}}}},{wcManaged:true});
+  // Other creation hooks can replace the submitted grants. Verify the actual
+  // document once; an already-correct journal needs no follow-up request.
+  if(fullGM()&&!sameOwnership(doc.ownership,ownership))await doc.update({ownership:ownershipPatch(doc.ownership,ownership)},{wcManaged:true});
+  if(directPlayer){
+    if(sameOwnership(doc.ownership,ownership))await doc.update({[`flags.${ID}.data.ownershipPending`]:false},{wcManaged:true});
+    else ui.notifications.info("Журнал сохранён, вы можете его редактировать. Права остальных участников применятся автоматически при входе мастера.");
+  }
   return doc;
 }
 export async function saveRecord(doc,input,body,expectedVersion,pageId) {
@@ -47,7 +58,7 @@ export async function saveRecord(doc,input,body,expectedVersion,pageId) {
   const page=textPage(doc,pageId);
   if((pageId&&!page)||(page&&!editable(page)))throw new Error("Нет права редактирования этой страницы.");
   if(expectedVersion!==versionOf(doc))throw new Error("Запись изменилась после открытия редактора. Скопируйте свой текст и откройте её заново.");
-  const old=meta(doc),next=cleanRecord({...input,section:fullGM()?input.section:old.section});
+  const old=meta(doc),next=cleanRecord({...input,imageFrame:input.imageFrame??old.imageFrame,section:fullGM()?input.section:old.section});
   const update={name:input.name.trim(),[`flags.${ID}.data`]:{...copy(old),...next}};
   if(fullGM()&&old.section!==next.section){
     update.folder=await nativeFolder(next.section);
@@ -63,7 +74,7 @@ export async function saveRecord(doc,input,body,expectedVersion,pageId) {
   await doc.update(update,{wcManaged:true});return doc;
 }
 export const folderIdOf=doc=>typeof doc?.folder==="string"?doc.folder:doc?.folder?.id||null;
-export const sectionFolders=section=>game.folders.filter(f=>f.type==="JournalEntry"&&f.getFlag(ID,"folderSection")===section);
+export const sectionFolders=section=>game.folders.filter(f=>f.type==="JournalEntry"&&f.getFlag(ID,"folderSection")===section).sort((a,b)=>(a.sort||0)-(b.sort||0)||a.name.localeCompare(b.name,"ru")||a.id.localeCompare(b.id));
 export function validFolder(id,section){return id&&game.folders.some(f=>f.id===id&&f.type==="JournalEntry"&&(f.getFlag(ID,"folderSection")===section||f.getFlag(ID,"section")===section))?id:null;}
 export function folderLabel(id){const result=[],seen=new Set();while(id&&!seen.has(id)){seen.add(id);const f=game.folders.get(id);if(!f||f.getFlag(ID,"root")||f.getFlag(ID,"section"))break;result.unshift(f.name);id=folderIdOf(f);}return result.join(" / ");}
 export async function saveFolder(section,name,parentId=null,id=null){
@@ -78,7 +89,34 @@ export async function saveFolder(section,name,parentId=null,id=null){
   const destination=parentId||await nativeFolder(section);
   if(game.folders.some(f=>f.id!==id&&f.name===name&&folderIdOf(f)===destination))throw new Error("Такая папка уже существует.");
   if(id){if(!sectionFolders(section).some(f=>f.id===id))throw new Error("Папка недоступна.");return game.folders.get(id).update({name,folder:destination});}
-  return CONFIG.Folder.documentClass.create({name,type:"JournalEntry",folder:destination,sorting:"m",flags:{[ID]:{folderSection:section}}});
+  const sort=Math.max(0,...sectionFolders(section).filter(f=>folderIdOf(f)===destination).map(f=>f.sort||0))+100000;
+  return CONFIG.Folder.documentClass.create({name,type:"JournalEntry",folder:destination,sort,sorting:"m",flags:{[ID]:{folderSection:section}}});
+}
+export async function moveFolder(folder,toFolder=null,before=null,after=false){
+  const section=folder?.getFlag(ID,"folderSection");
+  if(!fullGM()||!folder||game.folders.get(folder.id)!==folder||folder.type!=="JournalEntry"||!Object.hasOwn(CATALOGS,section)||folder.getFlag(ID,"root")||folder.getFlag(ID,"section"))throw new Error("Перемещать пользовательские папки кодекса может только мастер.");
+  if(toFolder&&!validFolder(toFolder,section))throw new Error("Перемещение возможно только в папки текущего раздела.");
+  const destination=toFolder||await nativeFolder(section),seen=new Set();
+  for(let id=destination;id;id=folderIdOf(game.folders.get(id))){
+    if(id===folder.id)throw new Error("Нельзя поместить папку внутрь самой себя или своего потомка.");
+    if(seen.has(id))throw new Error("В родительских папках обнаружен цикл.");seen.add(id);
+  }
+  if(before===folder.id)return folder;
+  const peers=sectionFolders(section).filter(f=>f.id!==folder.id&&folderIdOf(f)===destination);
+  if(peers.some(f=>f.name===folder.name))throw new Error("Такая папка уже существует в месте назначения.");
+  let index=before?peers.findIndex(f=>f.id===before):peers.length;
+  if(index<0)throw new Error("Папка для сортировки уже перемещена. Повторите перетаскивание.");
+  if(before&&after)index++;peers.splice(index,0,folder);
+  // Persist sibling order and the new parent in one request; contents keep their UUIDs.
+  const updates=peers.flatMap((f,i)=>{
+    const sort=(i+1)*100000,change={_id:f.id};
+    if(f.sort!==sort)change.sort=sort;
+    if(f===folder&&folderIdOf(f)!==destination)change.folder=destination;
+    return Object.keys(change).length>1?[change]:[];
+  });
+  const parent=game.folders.get(destination);if(parent&&parent.sorting!=="m")updates.push({_id:parent.id,sorting:"m"});
+  if(updates.length)await CONFIG.Folder.documentClass.updateDocuments(updates,{wcManaged:true});
+  return folder;
 }
 export async function moveRecord(doc,toFolder,before=null,after=false){
   if(!editable(doc)||meta(doc)?.kind!=="record")throw new Error("Нет права перемещения.");
@@ -98,7 +136,7 @@ export async function deleteRecord(doc){
 }
 export async function deleteFolder(folder){
   const section=folder?.getFlag(ID,"folderSection");
-  if(!fullGM()||!folder||game.folders.get(folder.id)!==folder||folder.type!=="JournalEntry"||!Object.hasOwn(SECTIONS,section)||folder.getFlag(ID,"root")||folder.getFlag(ID,"section"))throw new Error("Удалять пользовательские папки кодекса может только мастер.");
+  if(!fullGM()||!folder||game.folders.get(folder.id)!==folder||folder.type!=="JournalEntry"||!Object.hasOwn(CATALOGS,section)||folder.getFlag(ID,"root")||folder.getFlag(ID,"section"))throw new Error("Удалять пользовательские папки кодекса может только мастер.");
   const parent=validFolder(folderIdOf(folder),section)||await nativeFolder(section);
   // Move direct contents first; never ask Foundry to recursively delete documents.
   for(const doc of game.journal.filter(d=>folderIdOf(d)===folder.id))await doc.update({folder:parent},{wcManaged:true});
@@ -127,7 +165,7 @@ export async function saveMap(doc,data,expectedVersion){
 }
 export async function importJournal(doc,section,folderId=null){
   if(!fullGM())throw new Error("Добавлять журналы может только мастер.");
-  if(!doc||game.journal.get(doc.id)!==doc||meta(doc)?.kind||!Object.hasOwn(SECTIONS,section))throw new Error("Выберите обычный журнал мира и раздел.");
+  if(!doc||game.journal.get(doc.id)!==doc||meta(doc)?.kind||!Object.hasOwn(CATALOGS,section))throw new Error("Выберите обычный журнал мира и раздел.");
   if(!doc.pages.some(p=>p.type==="text"))throw new Error("В журнале должна быть хотя бы одна текстовая страница.");
   if(folderId&&!validFolder(folderId,section))throw new Error("Папка недоступна в этом разделе.");
   const data=cleanRecord({section});
@@ -154,12 +192,26 @@ export async function synchronizeOwnership({applyDefaults=false}={}) {
   for(const doc of managedRecords()){
     const m=meta(doc);
     if(m.accessMode!=="section"){skipped++;continue;}
-    if(m.managedOwnership&&!sameOwnership(doc.ownership,m.managedOwnership)){
+    const pending=m.ownershipPending||m.folderPending;
+    if(pending){
+      const creator=game.users.get(m.creatorId);
+      // Flags on player-owned documents are untrusted. Recheck the author and
+      // current GM settings; never execute a submitted ownership map or policy.
+      if(!creator||![1,2].includes(Number(creator.role))||!doc.testUserPermission(creator,"OWNER")||!canCreateInSection(m.section,creator)){
+        updates.push({_id:doc.id,[`flags.${ID}.data.ownershipPending`]:false,[`flags.${ID}.data.folderPending`]:false,[`flags.${ID}.data.accessMode`]:"manual"});skipped++;continue;
+      }
+    }
+    if(!pending&&!applyDefaults&&m.managedOwnership&&!sameOwnership(doc.ownership,m.managedOwnership)){
       updates.push({_id:doc.id,[`flags.${ID}.data.accessMode`]:"manual"});skipped++;continue;
     }
-    const rule=applyDefaults?policies()[m.section]:(m.rolePolicy||policies()[m.section]);
+    const rule=applyDefaults||pending?policies()[m.section]:(m.rolePolicy||policies()[m.section]);
     const ownership=roleOwnership({[m.section]:rule},m.section,game.users.contents);
-    if(applyDefaults||!sameOwnership(doc.ownership,ownership))updates.push({_id:doc.id,ownership:ownershipPatch(doc.ownership,ownership),[`flags.${ID}.data.managedOwnership`]:ownership,[`flags.${ID}.data.rolePolicy`]:rule});
+    if(applyDefaults||pending||!sameOwnership(doc.ownership,ownership)){
+      const change={_id:doc.id,ownership:ownershipPatch(doc.ownership,ownership),[`flags.${ID}.data.managedOwnership`]:ownership,[`flags.${ID}.data.rolePolicy`]:rule};
+      if(pending){change[`flags.${ID}.data.ownershipPending`]=false;change[`flags.${ID}.data.folderPending`]=false;}
+      if(m.folderPending&&!folderIdOf(doc))change.folder=await nativeFolder(m.section);
+      updates.push(change);
+    }
   }
   // One batch; core validates every update. No privileged socket handlers are used.
   if(updates.length)await CONFIG.JournalEntry.documentClass.updateDocuments(updates,{wcManaged:true});
@@ -168,7 +220,7 @@ export async function synchronizeOwnership({applyDefaults=false}={}) {
 export async function useSectionOwnership(doc) {
   if(!fullGM()||meta(doc)?.kind!=="record")throw new Error("Недостаточно прав.");
   const ownership=roleOwnership(policies(),meta(doc).section,game.users.contents);
-  await doc.update({ownership:ownershipPatch(doc.ownership,ownership),[`flags.${ID}.data.accessMode`]:"section",[`flags.${ID}.data.managedOwnership`]:ownership,[`flags.${ID}.data.rolePolicy`]:policies()[meta(doc).section]},{wcManaged:true});
+  await doc.update({ownership:ownershipPatch(doc.ownership,ownership),[`flags.${ID}.data.accessMode`]:"section",[`flags.${ID}.data.ownershipPending`]:false,[`flags.${ID}.data.managedOwnership`]:ownership,[`flags.${ID}.data.rolePolicy`]:policies()[meta(doc).section]},{wcManaged:true});
 }
 export function visibleDiaries() {
   return game.journal.filter(d=>meta(d)?.kind==="diary"&&readable(d)&&(game.user.isGM||meta(d).ownerId===game.user.id)).sort((a,b)=>a.name.localeCompare(b.name,"ru"));

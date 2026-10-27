@@ -1,7 +1,9 @@
 export const ID = "world-codex";
 export const SCHEMA = 2;
 export const SECTIONS = Object.freeze({quests:"Задания",world:"Мир",characters:"Персонажи",factions:"Фракции",locations:"Места",bestiary:"Бестиарий",maps:"Карты"});
-export const ICONS = {world:"globe",characters:"user",locations:"location-dot",factions:"flag",quests:"scroll",bestiary:"paw",maps:"map"};
+// Heroes share the journal model but have a secondary entry beside player diaries.
+export const CATALOGS = Object.freeze({...SECTIONS,heroes:"Герои"});
+export const ICONS = {world:"globe",characters:"user",heroes:"medal",locations:"location-dot",factions:"flag",quests:"scroll",bestiary:"paw",maps:"map"};
 export const PIN_TYPES={village:"Деревня",fortress:"Крепость",city:"Город",capital:"Столица",interest:"Место интереса",unknown:"Неизвестное",camp:"Военный лагерь",tomb:"Гробница",cave:"Пещера",monster:"Гнездо чудовищ",ruins:"Руины города"};
 export const LEVELS = {0:"Нет доступа",1:"Ограниченный",2:"Наблюдатель",3:"Владелец"};
 export const QUEST_STATES = {available:"Доступно",active:"В работе",completed:"Завершено",failed:"Провалено"};
@@ -9,11 +11,14 @@ export const OBJECTIVE_STATES = {todo:"Не выполнена",done:"Выпол
 export const copy = value => structuredClone(value);
 export const validLevel = value => [0,1,2,3].includes(Number(value)) ? Number(value) : 0;
 export function defaultPolicies() {
-  return Object.fromEntries(Object.keys(SECTIONS).map(s=>[s,{1:2,2:s==="world"?3:2}]));
+  return Object.fromEntries(Object.keys(CATALOGS).map(s=>[s,{1:2,2:s==="world"?3:2}]));
 }
 export function normalizePolicies(value) {
   const defaults=defaultPolicies();
-  return Object.fromEntries(Object.keys(SECTIONS).map(s=>[s,{1:validLevel(value?.[s]?.[1]??defaults[s][1]),2:validLevel(value?.[s]?.[2]??defaults[s][2])}]));
+  return Object.fromEntries(Object.keys(CATALOGS).map(s=>{
+    const fallback=s==="heroes"?value?.characters:null;
+    return [s,{1:validLevel(value?.[s]?.[1]??fallback?.[1]??defaults[s][1]),2:validLevel(value?.[s]?.[2]??fallback?.[2]??defaults[s][2])}];
+  }));
 }
 export function roleOwnership(policies, section, users) {
   const rule=normalizePolicies(policies)[section];
@@ -40,18 +45,22 @@ export function ownershipPatch(current,next) {
   return {...Object.fromEntries(Object.keys(current||{}).filter(k=>!Object.hasOwn(next,k)).map(k=>[k,validLevel(next.default??0)])),...next};
 }
 export function cleanRecord(input) {
-  const section=Object.hasOwn(SECTIONS,input.section)?input.section:"world";
+  const section=Object.hasOwn(CATALOGS,input.section)?input.section:"world";
   return {
     schema:SCHEMA,kind:"record",section,
     folder:String(input.folder||"").trim().slice(0,250),
     subtitle:String(input.subtitle||"").trim().slice(0,2000),
     image:safeImagePath(input.image),
+    imageFrame:cleanImageFrame(input.imageFrame),
     facts:(Array.isArray(input.facts)?input.facts:[]).slice(0,100).map(f=>({label:String(f.label||"").trim().slice(0,150),value:String(f.value||"").trim().slice(0,4000)})).filter(f=>f.label||f.value),
     quest:{status:Object.hasOwn(QUEST_STATES,input.quest?.status)?input.quest.status:"active",objectives:(input.quest?.objectives||[]).map(o=>({id:String(o.id||"").slice(0,80),text:String(o.text||"").trim().slice(0,2000),state:Object.hasOwn(OBJECTIVE_STATES,o.state)?o.state:"todo"})).filter(o=>o.text).slice(0,200)},
     map:cleanMap(input.map)
   };
 }
 export const clamp=(value,min,max,fallback=min)=>Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+export function cleanImageFrame(input={}){
+  return {fit:input?.fit==="contain"?"contain":"cover",zoom:clamp(input?.zoom??1,0.25,4,1),x:clamp(input?.x??0.5,0,1,0.5),y:clamp(input?.y??0.5,0,1,0.5)};
+}
 export const uid=()=>globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)+Date.now().toString(36);
 export function cleanMap(input={}){
   const ids=new Set();

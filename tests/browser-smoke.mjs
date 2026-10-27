@@ -21,11 +21,39 @@ for(const [engine,name] of [[chromium,'Chromium'],[firefox,'Firefox'],[webkit,'W
    await page.evaluate(()=>new (game.settings.menus.get('world-codex.keybindings').type)().render());assert.deepEqual(await page.evaluate(()=>keybindingOptions),{initialCategory:'world-codex'});
    await page.evaluate(()=>paintDirectory());assert.equal(await page.locator('.world-codex-launcher').count(),1);
    if(role==='gm'){
+    // Browser-native DataTransfer with the real folder handlers and persisted tree.
+    const second=await page.evaluate(async()=>{const store=await import('/scripts/store.js');const f=await store.saveFolder('quests','Later');await game.modules.get('world-codex').api.open();return f.id;});
+    const dragFolder=async(id,targetId,ratio)=>{
+     const data=await page.evaluateHandle(()=>new DataTransfer()),source=page.locator(`summary[data-codex-folder="${id}"]`),target=targetId?page.locator(`summary[data-codex-folder="${targetId}"]`):page.locator('.wc-root-drop');
+     const rect=await target.boundingBox(),clientY=rect.y+rect.height*ratio;
+     await source.dispatchEvent('dragstart',{dataTransfer:data});await target.dispatchEvent('dragover',{dataTransfer:data,clientY});assert.equal(await target.getAttribute('data-folder-drop'),!targetId?'inside':ratio<0.25?'before':ratio>0.75?'after':'inside');await target.dispatchEvent('drop',{dataTransfer:data,clientY});await data.dispose();
+    };
+    await dragFolder(second,await page.evaluate(()=>fixture.folderId),0.1);
+    await page.waitForFunction(id=>document.querySelector('.wc-tree > details')?.dataset.codexFolder===id,second);
+    await dragFolder(second,await page.evaluate(()=>fixture.folderId),0.5);
+    await page.waitForFunction(id=>{const f=game.folders.get(id);return (f.folder?.id||f.folder)===fixture.folderId;},second);
+    await page.waitForSelector(`details[data-codex-folder="${await page.evaluate(()=>fixture.folderId)}"] > details[data-codex-folder="${second}"]`);
+    await dragFolder(second,null,0.5);await page.waitForSelector(`.wc-tree > details[data-codex-folder="${second}"]`);await page.waitForFunction(id=>{const f=game.folders.get(id),root=game.folders.get(fixture.folderId);return (f.folder?.id||f.folder)===(root.folder?.id||root.folder);},second);
+    // Remove the extra empty folder so the following original context-menu case targets the fixture.
+    await page.evaluate(async id=>{const store=await import('/scripts/store.js');await store.deleteFolder(game.folders.get(id));await game.modules.get('world-codex').api.open();},second);
     await page.locator('.wc-page[data-record]').first().click({button:'right'});await page.getByRole('button',{name:'Настроить доступ',exact:true}).click();assert(await page.evaluate(()=>Boolean(window.ownershipDialog?.document)));
     await page.locator('summary[data-codex-folder]').first().click({button:'right'});await page.getByRole('button',{name:'Удалить папку',exact:true}).click();await page.waitForFunction(()=>!game.folders.get(fixture.folderId));assert(await page.evaluate(()=>Boolean(game.journal.get(fixture.recordId))));
     await page.locator('.wc-page[data-record]').first().click({button:'right'});await page.getByRole('button',{name:'Удалить запись',exact:true}).click();await page.waitForFunction(()=>!game.journal.get(fixture.recordId));
    }else{await page.locator('.wc-page[data-record]').first().click({button:'right'});assert.equal(await page.locator('#test-menu').count(),0);}
-   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, permission checks`,passed:true});await ctx.close();
+   await page.locator('.wc-heroes-button').click();await page.waitForFunction(()=>document.querySelector('#world-codex h1')?.textContent==='Remembered hero');assert.equal(await page.locator('.wc-main-tabs > button').count(),7);assert.equal(await page.locator('.wc-heroes-button').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.wc-main-tabs').getByText('Герои',{exact:true}).count(),0);
+   await page.locator('.wc-diary-button').click();await page.waitForFunction(()=>document.querySelector('.wc-diary-button')?.getAttribute('aria-pressed')==='true');await page.locator('.wc-heroes-button').click();await page.waitForFunction(()=>document.querySelector('#world-codex h1')?.textContent==='Remembered hero');
+   await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
+   if(role==='gm'){
+    await page.getByRole('button',{name:'Редактировать',exact:true}).click();await page.locator('.wc-frame-preview img').waitFor({state:'visible'});
+    const box=await page.locator('.wc-frame-preview').boundingBox();assert(Math.abs(box.width/box.height-5/6)<0.01);
+    await page.getByLabel('Размещение',{exact:true}).selectOption('contain');
+    for(const [key,value] of [['zoom','2'],['x','0.2']])await page.locator(`[data-frame-control="${key}"]`).evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},value);
+    const preview=await page.locator('.wc-frame-preview img').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top}));
+    await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.waitForSelector('.wc-frame-preview',{state:'detached'});await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
+    assert.deepEqual(await page.locator('.wc-art img.wc-framed-image').evaluate(el=>({width:el.style.width,height:el.style.height,left:el.style.left,top:el.style.top})),preview);
+    assert.deepEqual(await page.evaluate(()=>game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame),{fit:'contain',zoom:2,x:0.2,y:0.5});
+   }
+   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, permission checks and separate heroes catalog`,passed:true});await ctx.close();
   }
   const ctx=await browser.newContext(),failed=await ctx.newPage();let attempts=0;
   await failed.route('**/scripts/runtime.js?*',async route=>{attempts++;if(attempts<=2)await route.fulfill({status:429,body:'Too Many Requests',contentType:'text/plain'});else await route.continue();});

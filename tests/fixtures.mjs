@@ -32,6 +32,7 @@ export function setup(){
   let rules=defaultPolicies();
   globalThis.game={user:users[0],users,journal:new Collection(),folders:new Collection(),settings:{get:()=>structuredClone(rules),set:async(_id,_key,value)=>rules=structuredClone(value)}};
   globalThis.Folder={create:async data=>{const doc=new MockDocument({...data,documentName:"Folder"});game.folders.push(doc);return doc;}};
+  Folder.updateDocuments=async changes=>{for(const change of changes)await game.folders.get(change._id).update(change);return changes;};
   globalThis.JournalEntry={create:async data=>{const doc=new MockDocument(data);game.journal.push(doc);return doc;},updateDocuments:async changes=>{for(const change of changes)await game.journal.get(change._id).update(change);return changes;}};
   JournalEntry.createDocuments=async items=>{const docs=items.map(data=>new MockDocument(data));game.journal.push(...docs);return docs;};
   globalThis.CONFIG={JournalEntry:{documentClass:JournalEntry},Folder:{documentClass:Folder}};

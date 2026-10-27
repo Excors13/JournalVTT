@@ -1,1 +1,1 @@
-{"name":"world-codex","version":"1.0.3","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","pretest":"python3 tools/build_runtime.py"}}
+{"name":"world-codex","version":"1.2.2","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","pretest":"python3 tools/build_runtime.py"}}

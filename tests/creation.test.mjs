@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {setup} from "./fixtures.mjs";
 import {ID,defaultPolicies} from "../scripts/model.js";
-import {canCreateInSection,createRecord,saveFolder,meta,folderIdOf} from "../scripts/store.js";
+import {canCreateInSection,createRecord,saveFolder,meta,folderIdOf,nativeFolder,synchronizeOwnership} from "../scripts/store.js";
 import {handleCreationRequest,requestCreation} from "../scripts/creation.js";
 
 function prepare(){
@@ -23,7 +23,7 @@ test("GM relay uses authenticated writer, validates section policy and ignores s
   await player.setFlag(ID,"creationRequest",{id:"auth-owner",action:"record",section:"world",name:"World record",ownership:{default:3},body:"private text",flags:{bad:true}});
   assert.equal(handleCreationRequest(player,{}, {},"p"),undefined);assert.equal(game.journal.length,0);
   const result=await handleCreationRequest(player,{}, {},player.id);assert.equal(result.ok,true);
-  const doc=game.journal.get(result.id);assert.equal(meta(doc).section,"world");assert.equal(doc.ownership.default,0);assert.equal(doc.ownership.t,3);assert.equal(doc.pages[0].text.content,"");
+  const doc=game.journal.get(result.id);assert.equal(meta(doc).section,"world");assert.equal(doc.ownership.default,0);assert.equal(doc.ownership.t,3);assert.equal(doc.ownership.p,2);assert.equal(doc.pages[0].text.content,"");
   await handleCreationRequest(player,{}, {},player.id);assert.equal(game.journal.length,1);
   await player.setFlag(ID,"creationRequest",{id:"auth-denied",action:"record",section:"quests",name:"Denied"});
   assert.equal((await handleCreationRequest(player,{}, {},player.id)).ok,false);assert.equal(game.journal.length,1);
@@ -82,5 +82,29 @@ test("a section owner without global creation permissions gets a journal and fol
   const doc=await createRecord({name:"Player journal",section:"world",folderId:folder.id,facts:[{label:"Author",value:"Player"}]},"<p>Private draft body</p>");
   assert.equal(game.user,player);assert.equal(doc.ownership.t,3);assert.equal(folderIdOf(doc),folder.id);assert.equal(doc.pages[0].text.content,"<p>Private draft body</p>");
   assert.equal(meta(doc).facts[0].value,"Player");assert.equal(player.getFlag(ID,"creationRequest").body,undefined);assert.equal(callbacks.size,0);
+});
+
+for(const [creatorId,section] of [['p','characters'],['t','characters'],['t','heroes']])test(`native creation allowed: ${creatorId} in ${section} still gives all role members section ownership`,async()=>{
+  const {setRules}=prepare(),rules=defaultPolicies();rules.characters={1:3,2:3};rules.heroes={1:3,2:3};setRules(rules);await nativeFolder(section);
+  game.users.push({id:'offline-p',role:1,isGM:false,active:false},{id:'offline-t',role:2,isGM:false,active:false});
+  const callbacks=new Map();let counter=0;globalThis.Hooks={on:(_event,fn)=>{const id=++counter;callbacks.set(id,fn);return id;},off:(_event,id)=>callbacks.delete(id)};
+  CONFIG.JournalEntry.documentClass.canUserCreate=()=>true;
+  const gm=game.users.get('gm'),player=game.users.get(creatorId),creators=[],nativeCreate=JournalEntry.create;
+  JournalEntry.create=async(data,options)=>{
+    creators.push(game.user.id);
+    // Model the creator-only ownership reported by the real player client.
+    if(game.user!==gm)data={...data,ownership:{default:0,[game.user.id]:3}};
+    return nativeCreate(data,options);
+  };
+  game.user=player;player.setFlag=async(scope,key,value)=>{
+    (player.flags[scope]??={})[key]=structuredClone(value);
+    if(key!=='creationRequest')return player;
+    game.user=gm;try{await handleCreationRequest(player,{}, {},player.id);}finally{game.user=player;}
+    for(const fn of [...callbacks.values()])fn(player,{}, {},gm.id);return player;
+  };
+  const doc=await createRecord({name:'Player character',section,facts:[{label:'Group',value:'Party'}]},'<p>Draft stays intact</p>');
+  assert.deepEqual(creators,['gm']);assert.deepEqual(doc.ownership,{default:0,gm:3,p:3,t:3,'offline-p':3,'offline-t':3});
+  assert.equal(meta(doc).accessMode,'section');assert.deepEqual(meta(doc).managedOwnership,doc.ownership);assert.equal(doc.pages[0].text.content,'<p>Draft stays intact</p>');
+  game.user=gm;const result=await synchronizeOwnership();assert.equal(result.updated,0);assert.equal(meta(doc).accessMode,'section');assert.equal(callbacks.size,0);
 });
 

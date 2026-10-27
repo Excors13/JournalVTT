@@ -80,6 +80,12 @@ test("native ownership saves become manual exceptions and survive section synchr
 
 
 
+test("entering the world as GM automatically applies pending offline ownership",async()=>{
+  const doc=await createRecord({name:'Created while GM was away',section:'world'},'<p>Offline text</p>');doc.ownership={default:0,t:3};Object.assign(meta(doc),{creatorId:'t',ownershipPending:true});
+  game.ready=true;hooks.get('ready')();await new Promise(resolve=>setTimeout(resolve,250));
+  assert.equal(meta(doc).ownershipPending,false);assert.equal(doc.ownership.p,2);assert.equal(doc.ownership.t,3);assert.equal(doc.pages[0].text.content,'<p>Offline text</p>');
+});
+
 test("players can open the keybinding settings directly from module settings",async()=>{
   game.user=game.users.get("p");assert.equal(binding.restricted,false);assert.equal(menus.get("keybindings").restricted,false);assert.equal(menus.get("open").restricted,false);
   let configured,rendered;
