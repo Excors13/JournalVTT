@@ -17,7 +17,7 @@ export function mountCodexLauncher(html,open){
   const root=html?.querySelector?html:html?.[0];if(!root?.querySelector)return;
   hideNativeCodex(root);
   let launcher=root.querySelector(".world-codex-launcher");
-  if(!launcher)launcher=button("Кодекс мира",open,{icon:"book-open",cls:"world-codex-launcher",title:`Открыть кодекс мира · ${game.modules.get(ID)?.version||""}`});
+  if(!launcher)launcher=button("Кодекс мира",()=>open(),{icon:"book-open",cls:"world-codex-launcher",title:`Открыть кодекс мира · ${game.modules.get(ID)?.version||""}`});
   // Core creation controls may be hidden for players. Keep our button outside them.
   const host=root.querySelector(".directory-header")||root;
   if(launcher.parentElement!==host)host.prepend(launcher);

@@ -1,7 +1,7 @@
 import vm from 'node:vm';import fs from 'node:fs/promises';import assert from 'node:assert/strict';
 const source=await fs.readFile('scripts/bootstrap.js','utf8'),scenario=process.argv[2];
 const hooks=new Map(),timers=[],notices=[],requests=[];let key,registered=0,resumed=0,opened=0;
-const module={version:'1.2.2'},game={ready:scenario==='late-start',modules:new Map([['world-codex',module]]),keybindings:{register(_id,_key,value){registered++;key=value;}}};
+const module={version:'1.2.3'},game={ready:scenario==='late-start',modules:new Map([['world-codex',module]]),keybindings:{register(_id,_key,value){registered++;key=value;}}};
 const callHook=name=>{const callbacks=hooks.get(name)||[];hooks.delete(name);for(const callback of callbacks)callback();};
 const ready=()=>{game.ready=true;callHook('ready');};
 const flush=async()=>{for(let i=0;i<12;i++)await new Promise(setImmediate);};

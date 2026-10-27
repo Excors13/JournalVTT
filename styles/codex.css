@@ -15,14 +15,14 @@
 .wc-app h2 {font:400 21px/1.35 Georgia,serif;margin:23px 0 12px;}
 .wc-app h3 {font:400 17px/1.4 Georgia,serif;margin:0 0 12px;}
 .wc-app p {margin:0 0 15px;}
-.wc-app .wc-top {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px 5px;font:11px/1.5 system-ui,sans-serif;}
+.wc-app .wc-top {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;flex-shrink:0;gap:12px;padding:10px 20px 5px;font:11px/1.5 system-ui,sans-serif;}
 .wc-app .wc-brand {text-transform:uppercase;letter-spacing:.16em;color:var(--wc-muted);}
-.wc-app .wc-account {display:flex;align-items:center;gap:12px;color:var(--wc-muted);}
-.wc-app .wc-tabs {display:grid;grid-template-columns:53px minmax(0,1fr);align-items:center;padding:0 18px;position:relative;border-bottom:1px solid var(--wc-line);}
+.wc-app .wc-account {display:flex;align-items:center;min-width:0;margin-left:auto;gap:12px;color:var(--wc-muted);}
+.wc-app .wc-tabs {display:grid;grid-template-columns:36px 36px minmax(0,1fr);column-gap:12px;align-items:center;flex-shrink:0;min-width:0;padding:0 18px;position:relative;border-bottom:1px solid var(--wc-line);}
 .wc-app .wc-tabs:after {content:"◆";position:absolute;left:50%;bottom:-10px;color:var(--wc-gold);font-size:13px;background:var(--wc-bg);padding:0 18px;pointer-events:none;}
 .wc-app .wc-diary-button,.wc-app .wc-heroes-button {width:36px;height:36px;padding:0;color:var(--wc-gold);flex-shrink:0;}
 .wc-app .wc-diary-button[aria-pressed="true"],.wc-app .wc-heroes-button[aria-pressed="true"] {background:var(--wc-select);border-color:var(--wc-gold);box-shadow:0 0 12px #c8985424;}
-.wc-app .wc-main-tabs {display:flex;justify-content:center;gap:0 20px;flex-wrap:wrap;}
+.wc-app .wc-main-tabs {display:flex;grid-column:3;min-width:0;align-items:center;justify-content:center;gap:0 20px;flex-wrap:wrap;}
 .wc-app .wc-main-tabs .wc-button {position:relative;background:transparent;border:0;color:var(--wc-muted);padding:16px 0 18px;font:15px/1.5 Georgia,serif;border-radius:0;}
 .wc-app .wc-main-tabs .wc-button[aria-current="page"] {color:#fff0c8;text-shadow:0 0 13px #ffdf9355;}
 .wc-app .wc-main-tabs .wc-button[aria-current="page"]:after {content:"";position:absolute;bottom:1px;left:12%;right:12%;height:2px;background:linear-gradient(90deg,transparent,#f4dcb2,transparent);box-shadow:0 -2px 8px #f4dcb255;}

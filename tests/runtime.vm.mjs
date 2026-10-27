@@ -1,5 +1,5 @@
 import vm from 'node:vm';import fs from 'node:fs/promises';import assert from 'node:assert/strict';import {setup} from './fixtures.mjs';
-setup();const module={version:'1.2.2',__codexBindingRegistered:true,api:{loader:{state:'loading'}}};game.modules=new Map([['world-codex',module]]);game.ready=true;
+setup();const module={version:'1.2.3',__codexBindingRegistered:true,api:{loader:{state:'loading'}}};game.modules=new Map([['world-codex',module]]);game.ready=true;
 let settings=0,menus=0,bindings=0;game.settings.register=()=>settings++;game.settings.registerMenu=()=>menus++;game.keybindings={register(){bindings++;}};
 const hooks=[],timers=[];class Application{async render(){this.rendered=true;return this;}async close(){this.rendered=false;return this;}bringToFront(){}}
 const context=vm.createContext({game,CONFIG,JournalEntry,Folder,structuredClone,crypto,Map,Set,URL,window:{innerWidth:1200,innerHeight:800},document:{activeElement:null},console,CONST:{KEYBINDING_PRECEDENCE:{PRIORITY:0}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},Hooks:{once:(event,callback)=>hooks.push({event,callback}),on:(event,callback)=>hooks.push({event,callback})},ui:{notifications:{error:message=>{throw new Error(message);}}},foundry:{applications:{api:{ApplicationV2:Application,DialogV2:{confirm:async()=>true}}}}});

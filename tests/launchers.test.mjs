@@ -19,7 +19,7 @@ function setupDOM(){
   const root=new Element(),header=new Element(),actions=new Element();header.className='directory-header';actions.className='header-actions';actions.hidden=true;header.append(actions);root.append(header);return {root,header,actions};
 }
 test('player launcher remains outside hidden native creation actions and reports errors normally',async()=>{
-  const {root,header,actions}=setupDOM();let opened=0;mountCodexLauncher(root,()=>opened++);
+  const {root,header,actions}=setupDOM();let opened=0;mountCodexLauncher(root,(...args)=>{assert.equal(args.length,0,'A click event must not be passed as a journal UUID');opened++;});
   const launcher=root.querySelector('.world-codex-launcher');assert.equal(launcher.parentElement,header);assert.notEqual(launcher.parentElement,actions);
   await launcher.listeners.get('click')({preventDefault(){}});assert.equal(opened,1);
   mountCodexLauncher(root,()=>opened++);assert.equal(header.children.filter(c=>c===launcher).length,1);
