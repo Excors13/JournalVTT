@@ -1,6 +1,10 @@
 // No imports here: one small entry point survives a failure to load the runtime.
-const ID="world-codex",module=game.modules.get(ID);
-if(!module.__codexLoaderStarted){
+const ID="world-codex";
+function startCodexLoader(fromInit=false){
+  // ES modules may evaluate before the socket has created game or its packages.
+  // Read the descriptor inside Foundry's lifecycle, never at module evaluation.
+  const module=game.modules?.get(ID);
+  if(!module||module.__codexLoaderStarted)return;
   module.__codexLoaderStarted=true;
   const api=module.api=module.api||{};api.version=module.version;
   const status=api.loader={state:"waiting",attempt:0,nextRetryAt:null,lastError:null};
@@ -14,11 +18,10 @@ if(!module.__codexLoaderStarted){
     }
     return true;
   }
-  Hooks.once("init",()=>{
-    if(module.__codexBindingRegistered)return;
+  if(fromInit&&!module.__codexBindingRegistered){
     game.keybindings.register(ID,"open",{name:"Открыть / закрыть кодекс мира",hint:"Выбранное сочетание переключает окно кодекса. По умолчанию J (О в русской раскладке). При вводе текста клавиша не перехватывается.",editable:[{key:"KeyJ"}],onDown:onKey,repeat:false,precedence:CONST.KEYBINDING_PRECEDENCE.PRIORITY,restricted:false});
     module.__codexBindingRegistered=true;
-  });
+  }
   function schedule(delay){
     status.nextRetryAt=Date.now()+delay;
     setTimeout(()=>{status.nextRetryAt=null;void load();},delay);
@@ -55,3 +58,11 @@ if(!module.__codexLoaderStarted){
   function afterWorldReady(){schedule(2000+Math.floor(Math.random()*1000));}
   if(game.ready)afterWorldReady();else Hooks.once("ready",afterWorldReady);
 }
+Hooks.once("init",()=>startCodexLoader(true));
+// A delayed entry file can miss init. The runtime handles late registration.
+Hooks.once("ready",()=>startCodexLoader());
+function worldAlreadyReady(){
+  // Foundry may not have assigned the global game binding yet.
+  try{return game?.ready===true;}catch(error){if(error?.name==="ReferenceError")return false;throw error;}
+}
+if(worldAlreadyReady())startCodexLoader();
