@@ -1,0 +1,26 @@
+{
+  "id": "world-codex",
+  "title": "World Codex — Кодекс мира",
+  "description": "Кодекс мира: задания, фракции, бестиарий, карты с метками и подписями, личные дневники. Права по ролям Foundry VTT.",
+  "version": "1.1.1",
+  "authors": [
+    {
+      "name": "World Codex contributors"
+    }
+  ],
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14"
+  },
+  "esmodules": [
+    "scripts/bootstrap.js"
+  ],
+  "styles": [
+    "styles/codex.css"
+  ],
+  "license": "LICENSE",
+  "readme": "README.md",
+  "url": "https://github.com/Excors13/JournalVTT",
+  "manifest": "https://github.com/Excors13/JournalVTT/releases/latest/download/module.json",
+  "download": "https://github.com/Excors13/JournalVTT/releases/download/v1.1.1/world-codex.zip"
+}
