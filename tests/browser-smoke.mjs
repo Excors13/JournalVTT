@@ -6,6 +6,12 @@ async function ready(page,url,waitForRuntime=true){
  await page.goto(url);await page.waitForFunction(()=>window.testReady||window.harnessError);assert.equal(await page.evaluate(()=>window.harnessError),undefined);
  if(waitForRuntime){await page.waitForFunction(()=>game.modules.get('world-codex').api?.loader?.state==='ready');}
 }
+async function checkReferenceButtons(page,uuid){
+ const before=await page.evaluate(()=>JSON.stringify(game.journal,(key,value)=>key==='parent'?undefined:value));
+ await page.getByRole('button',{name:'Скопировать UUID',exact:true}).click();assert.equal(await page.evaluate(()=>copiedText),uuid);
+ await page.getByRole('button',{name:'Скопировать ссылку Foundry',exact:true}).click();assert.equal(await page.evaluate(()=>copiedText),`@UUID[${uuid}]`);
+ assert.equal(await page.evaluate(()=>JSON.stringify(game.journal,(key,value)=>key==='parent'?undefined:value)),before,'Copy must not write journals or permissions');
+}
 const results=[];
 async function checkNavigationLayout(page){
  const original=await page.locator('#world-codex').evaluate(el=>el.style.width);
@@ -56,7 +62,7 @@ for(const [engine,name] of [[chromium,'Chromium'],[firefox,'Firefox'],[webkit,'W
    await page.locator('.wc-art img.wc-framed-image').waitFor({state:'visible'});
    assert.equal(await page.locator('.wc-access-badge').count(),role==='gm'?1:0);
    await page.locator('.wc-image-open').click();assert.deepEqual(await page.evaluate(()=>({src:imagePopout.src,uuid:imagePopout.uuid,title:imagePopout.window.title})),{src:'/assets/demo-map.svg',uuid:await page.evaluate(()=>game.journal.get(fixture.heroId).uuid),title:'Remembered hero'});
-   await page.getByRole('button',{name:'Редактировать',exact:true}).click();assert.equal(await page.locator('#world-codex .wc-frame-preview').count(),0);assert.equal(await page.locator('#world-codex input[aria-label="Изображение"]').count(),0);
+   await page.getByRole('button',{name:'Редактировать',exact:true}).click();await checkReferenceButtons(page,await page.evaluate(()=>game.journal.get(fixture.heroId).uuid));assert.equal(await page.locator('#world-codex .wc-frame-preview').count(),0);assert.equal(await page.locator('#world-codex input[aria-label="Изображение"]').count(),0);
    const original=await page.evaluate(()=>structuredClone(game.journal.get(fixture.heroId).getFlag('world-codex','data').imageFrame));
    await page.getByRole('button',{name:'Редактировать изображение',exact:true}).click();await page.locator('.wc-crop-source').waitFor({state:'visible'});await page.locator('.wc-frame-preview img').waitFor({state:'visible'});
    const dialog=page.locator('#world-codex-image-editor');assert(await dialog.isVisible());
@@ -92,10 +98,16 @@ for(const [engine,name] of [[chromium,'Chromium'],[firefox,'Firefox'],[webkit,'W
    }
    if(role==='gm'){
     await page.evaluate(async()=>{const store=await import('/scripts/store.js');const doc=await store.createRecord({name:'Full map',section:'maps',image:'/assets/demo-map.svg'},'');await game.modules.get('world-codex').api.open(doc.uuid);});
-    await page.getByRole('button',{name:'Свойства',exact:true}).click();assert(await page.getByLabel('Изображение карты',{exact:true}).isVisible());assert.equal(await page.locator('.wc-edit-image:visible').count(),0);
+    await page.getByRole('button',{name:'Свойства',exact:true}).click();await checkReferenceButtons(page,await page.evaluate(()=>game.journal.find(d=>d.name==='Full map').uuid));assert(await page.getByLabel('Изображение карты',{exact:true}).isVisible());assert.equal(await page.locator('.wc-edit-image:visible').count(),0);
     await page.getByLabel('Изображение карты',{exact:true}).fill('/assets/icons/city.svg');await page.getByRole('button',{name:'Сохранить',exact:true}).click();await page.locator('.wc-map-image').waitFor({state:'visible'});assert.equal(await page.locator('.wc-map-image').getAttribute('src'),'/assets/icons/city.svg');
    }
-   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, GM-only access badges, heroes, separate image editor, crop controls, cancellation, save and native image opening`,passed:true});await ctx.close();
+   if(role!=='gm'){
+    await page.locator('.wc-diary-button').click();await page.getByRole('button',{name:'Редактировать',exact:true}).click();await checkReferenceButtons(page,await page.evaluate(()=>game.journal.find(d=>d.getFlag('world-codex','data')?.ownerId===game.user.id).pages[0].uuid));
+    await page.getByRole('button',{name:'Отмена',exact:true}).click();await page.getByRole('button',{name:'Запись',exact:true}).click();assert(await page.getByRole('button',{name:'Скопировать UUID',exact:true}).isDisabled());assert(await page.getByRole('button',{name:'Скопировать ссылку Foundry',exact:true}).isDisabled());
+   }else{
+    await page.locator('.wc-heroes-button').click();await page.getByRole('button',{name:'Журнал',exact:true}).click();assert(await page.getByRole('button',{name:'Скопировать UUID',exact:true}).isDisabled());
+   }
+   assert.deepEqual(await page.evaluate(()=>errors),[]);results.push({browser:name,case:`fresh ${role}: launch, hide, typing, rebind, menus, GM-only access badges, heroes, separate image editor, crop controls, cancellation, save, native image opening, copy UUID/reference and unsaved record guards`,passed:true});await ctx.close();
   }
   const ctx=await browser.newContext(),failed=await ctx.newPage();let attempts=0;
   await failed.route('**/scripts/runtime.js?*',async route=>{attempts++;if(attempts<=2)await route.fulfill({status:429,body:'Too Many Requests',contentType:'text/plain'});else await route.continue();});

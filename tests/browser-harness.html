@@ -5,6 +5,8 @@ const query=new URLSearchParams(location.search),role=query.get('role')||'p';
 const folder=await store.saveFolder('quests','Investigations'),record=await store.createRecord({name:'Find the masks',section:'quests',folderId:folder.id},'<p>Find the camp.</p>');await store.provisionDiaries();
 const hero=await store.createRecord({name:'Remembered hero',section:'heroes',image:'/assets/demo-map.svg',facts:[{label:'Legacy',value:'Saved the city'}]},'<p>A remembered story.</p>');
 await hero.update({ownership:{p:3,t:3}});
+for(const doc of game.journal.filter(d=>d.getFlag(ID,'data')?.kind==='diary'))await doc.createEmbeddedDocuments('JournalEntryPage',[{name:'Day one',type:'text',text:{content:'<p>Diary text</p>'},flags:{[ID]:{date:'Day one'}}}]);
+game.clipboard={copyPlainText:async text=>{window.copiedText=text;}};
 const plain=await JournalEntry.create({name:'Ordinary journal',ownership:{default:2},pages:[]});
 game.user=game.users.get(role);if(role!=='gm')game.journal.splice(0,game.journal.length,...game.journal.filter(d=>d.testUserPermission(game.user,'LIMITED')));
 window.fromUuid=async uuid=>{const [type,id,pageType,pageId]=uuid.split('.');const doc=type==='JournalEntry'?game.journal.get(id):null;return pageType==='JournalEntryPage'?doc?.pages.get(pageId):doc;};
@@ -22,7 +24,7 @@ class App{
 window.foundry={applications:{api:{ApplicationV2:App,DialogV2:{confirm:async()=>confirmDelete}},sidebar:{apps:{ControlsConfig:class extends App{constructor(o){super(o);window.keybindingOptions=o;}async render(o){window.keybindingRendered=o;return this;}}}},ux:{TextEditor:{implementation:{enrichHTML:async html=>html}}},apps:{ImagePopout:class extends App{constructor(o){super(o);window.imagePopout=o;}},DocumentOwnershipConfig:class extends App{constructor(o){super(o);window.ownershipDialog=o;}}}}};
 foundry.applications.elements={HTMLProseMirrorElement:{create:({value})=>{const el=document.createElement('textarea');el.value=value;el.save=()=>{};el.isDirty=()=>false;return el;}}};
 window.CONST={KEYBINDING_PRECEDENCE:{PRIORITY:0}};
-game.modules=new Map([[ID,{version:'1.2.4',active:true}]]);game.ready=false;
+game.modules=new Map([[ID,{version:'1.2.5',active:true}]]);game.ready=false;
 const rulesGet=game.settings.get,values=new Map();game.settings.settings=new Map();game.settings.menus=new Map();game.settings.register=(id,key,config)=>{game.settings.settings.set(`${id}.${key}`,config);values.set(`${id}.${key}`,config.default);};game.settings.registerMenu=(id,key,config)=>game.settings.menus.set(`${id}.${key}`,config);game.settings.get=(id,key)=>key==='policies'?rulesGet(id,key):values.get(`${id}.${key}`);game.settings.set=async(id,key,value)=>values.set(`${id}.${key}`,value);
 const actions=new Map(),bindings=new Map();game.keybindings={register:(id,key,config)=>{actions.set(`${id}.${key}`,config);if(!bindings.has(`${id}.${key}`))bindings.set(`${id}.${key}`,structuredClone(config.editable));},get:(id,key)=>bindings.get(`${id}.${key}`),set:async(id,key,next)=>bindings.set(`${id}.${key}`,structuredClone(next))};
 window.addEventListener('keydown',event=>{for(const [id,action] of actions){if(action.restricted&&!game.user.isGM)continue;for(const binding of bindings.get(id)||[]){const mods=binding.modifiers||[];if(binding.key!==event.code||event.ctrlKey!==mods.includes('CONTROL')||event.shiftKey!==mods.includes('SHIFT')||event.altKey!==mods.includes('ALT'))continue;if(action.onDown({event,repeat:event.repeat}))event.preventDefault();}}});

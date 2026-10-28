@@ -103,7 +103,9 @@
 .wc-app .wc-note,.wc-app .wc-side-note {font:12px/1.7 system-ui,sans-serif;color:var(--wc-muted);}
 .wc-app .wc-side-note {font-size:11px;border-top:1px solid var(--wc-lowline);padding-top:16px;margin-top:25px;}
 .wc-app .wc-editor {padding:25px 28px;}
-.wc-app .wc-editor>h2 {margin-top:0;}
+.wc-app .wc-editor-heading{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+.wc-app .wc-editor-heading h2{margin:0;}
+.wc-app .wc-reference-tools{display:inline-flex;gap:6px;align-items:center;}
 .wc-app .wc-field {display:block;font:12px/1.5 system-ui,sans-serif;color:var(--wc-muted);margin-bottom:16px;min-width:0;}
 .wc-app .wc-field>span {display:block;margin-bottom:5px;}
 .wc-app input,.wc-app textarea,.wc-app select {width:100%;height:auto;min-height:34px;max-width:100%;border:1px solid var(--wc-line);border-radius:3px;background:var(--wc-field);color:var(--wc-text);padding:8px;font:14px/1.6 system-ui,sans-serif;box-shadow:none;}

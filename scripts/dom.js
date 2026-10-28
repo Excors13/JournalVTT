@@ -10,6 +10,14 @@ export function button(label,action,{icon:iconName,cls="",title,disabled=false}=
   b.addEventListener("click",async e=>{e.preventDefault();try{await action(e);}catch(error){report(error);}});return b;
 }
 export function report(error) {console.error("World Codex |",error);ui.notifications.error(error.message||"Не удалось выполнить действие.");}
+export function referenceButtons(doc){
+  const tools=node("div","wc-reference-tools"),uuid=doc?.uuid;
+  for(const [link,label,title,iconName,cls] of [[false,"UUID","Скопировать UUID","copy","wc-copy-uuid"],[true,"","Скопировать ссылку Foundry","link","wc-copy-reference"]]){
+    const b=button(label,async()=>{if(!uuid)return;await game.clipboard.copyPlainText(link?`@UUID[${uuid}]`:uuid);ui.notifications.info(link?"Ссылка Foundry скопирована.":"UUID скопирован.");},{icon:iconName,title,cls,disabled:!uuid});
+    if(!uuid)b.dataset.tooltip="Сначала сохраните новую запись, чтобы получить её UUID.";tools.append(b);
+  }
+  return tools;
+}
 export function field(label,value,{tag="input",name="",rows=3,required=false}={}) {
   const wrap=node("label","wc-field");wrap.append(node("span","",label));const input=node(tag);input.name=name;input.value=value??"";input.required=required;input.setAttribute("aria-label",label);
   if(tag==="textarea")input.rows=rows;wrap.append(input);return {wrap,input};
